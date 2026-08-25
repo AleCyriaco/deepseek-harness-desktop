@@ -47,6 +47,11 @@ npm run setup
 npm run dev
 ```
 
+`npm run setup` includes `npm run backend:install`, which is required before
+anything compiles: the bundle config references `backend/node_modules/` and
+`tauri-build` checks that path at compile time. If you only want to run the
+tests, `mkdir -p backend/node_modules` is enough.
+
 ## Before you open a pull request
 
 Run exactly what CI runs:

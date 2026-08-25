@@ -94,6 +94,11 @@ cd src-tauri
 cargo test
 ```
 
+> **`resource path ../backend/node_modules doesn't exist`?** `tauri-build`
+> validates every `bundle.resources` path at compile time, so the directory
+> must exist even for a plain `cargo test`. Run `npm run backend:install`, or
+> `mkdir -p backend/node_modules` if you only want to compile.
+
 Expected output:
 
 ```

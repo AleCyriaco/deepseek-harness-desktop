@@ -36,6 +36,14 @@ jobs:
             libssl-dev \
             libgtk-3-dev
 
+      # tauri-build validates every bundle.resources path at compile time, and
+      # the release bundle ships backend/node_modules/. CI only compiles and
+      # tests — it never bundles — so an empty directory satisfies the check
+      # without downloading the ~270 MB harness runtime on every job.
+      - name: Create the backend resource directory
+        run: mkdir -p backend/node_modules
+        shell: bash
+
       - name: Install the Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -78,6 +86,14 @@ jobs:
             file \
             libssl-dev \
             libgtk-3-dev
+
+      # tauri-build validates every bundle.resources path at compile time, and
+      # the release bundle ships backend/node_modules/. CI only compiles and
+      # tests — it never bundles — so an empty directory satisfies the check
+      # without downloading the ~270 MB harness runtime on every job.
+      - name: Create the backend resource directory
+        run: mkdir -p backend/node_modules
+        shell: bash
 
       - name: Install the Rust toolchain
         uses: dtolnay/rust-toolchain@stable
