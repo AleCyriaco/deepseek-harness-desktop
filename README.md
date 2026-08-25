@@ -15,10 +15,21 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 | Windows | WebView2 (Edge) | `.msi`, `.exe` (NSIS) |
 | Linux | WebKitGTK | `.deb`, `.rpm`, AppImage |
 
+## Download
+
+Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/dsh-desktop/releases). The macOS build is a **universal binary** (Apple Silicon and Intel) with the harness runtime bundled inside, so the only thing it needs on your machine is **Node.js 20 or newer**.
+
+Because the bundles are unsigned, macOS quarantines them on first launch. Clear the flag once after moving the app into `/Applications`:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
+```
+
 ---
 
 ## Table of contents
 
+- [Download](#download)
 - [Why a shell instead of a port](#why-a-shell-instead-of-a-port)
 - [How it works](#how-it-works)
 - [Prerequisites](#prerequisites)
@@ -110,19 +121,29 @@ npm run build
 
 ## Shipping a self-contained app
 
-By default the built app expects a `dsh` backend to be resolvable on the target machine. To ship an app that needs nothing but Node.js, bundle the backend runtime into the app resources — add this to `src-tauri/tauri.conf.json`:
+Release bundles are **self-contained by default**: `src-tauri/tauri.conf.json`
+copies `backend/node_modules/` into the app resources, so the packaged app
+carries its own harness runtime and never has to find a `dsh` install on the
+target machine.
 
-```json
-"bundle": {
-  "resources": {
-    "../backend/node_modules/": "backend/node_modules/"
-  }
-}
+That makes `npm run backend:install` a build prerequisite:
+
+```sh
+npm run backend:install   # populates backend/node_modules (~270 MB)
+npm run build
 ```
 
-Then run `npm run backend:install` before `npm run build`. The shell already searches the packaged `resource_dir` for `backend/node_modules/@deepseek-ai/dsh/lib/bin.js`, so the bundled copy is found automatically. Without this step, the app falls back to `dsh` on `PATH` or `npx`.
+The shell searches the packaged `resource_dir` for
+`backend/node_modules/@deepseek-ai/dsh/lib/bin.js` and finds the bundled copy
+automatically.
 
-> The bundled runtime is ~270 MB on disk, which is why it is opt-in rather than the default.
+To build a slim app instead — one that resolves `dsh` on the target machine —
+delete the `bundle.resources` entry from `src-tauri/tauri.conf.json`. The app
+then falls back to `dsh` on `PATH` or the `npx` bootstrap.
+
+> Node.js itself is **not** bundled. The app locates the user's existing Node
+> installation, including ones a GUI launcher would not see — see
+> [Finding Node](#finding-node).
 
 ## Backend resolution
 
@@ -132,18 +153,45 @@ The shell picks the **first available** backend, in this order:
 |---|---|---|
 | 1 | `DSH_DESKTOP_BACKEND` env var | the given executable, or `node <given .js/.mjs/.cjs>` |
 | 2 | `<root>/backend/node_modules/@deepseek-ai/dsh/lib/bin.js` | `node <that path>` |
-| 3 | `dsh` on `PATH` | `dsh` |
-| 4 | `npx` on `PATH` | `npx --yes @deepseek-ai/dsh@latest` |
+| 3 | `dsh` on `PATH` or a well-known install directory | `dsh` |
+| 4 | `npx`, same lookup | `npx --yes @deepseek-ai/dsh@latest` |
 
-`<root>` is searched across the packaged resource directory, up to six ancestors of the executable, the current working directory, and `$CARGO_MANIFEST_DIR/..` — so the same lookup works for a dev build, a `cargo run`, and a packaged `.app`.
+`<root>` is searched across the packaged resource directory, up to six
+ancestors of the executable, the current working directory, and
+`$CARGO_MANIFEST_DIR/..` — so the same lookup works for a dev build, a
+`cargo run`, and a packaged `.app`.
 
-If none of the four resolve, the app prints a diagnostic to stderr and exits with status `1`.
+If none of the four resolve, the app prints a diagnostic to stderr naming the
+fixes and exits with status `1`.
+
+### Finding Node
+
+A macOS `.app` opened from Finder inherits launchd's minimal `PATH`
+(`/usr/bin:/bin:/usr/sbin:/sbin`), which contains **no Node installation** —
+Homebrew's lives in `/opt/homebrew/bin`, nvm's under `~/.nvm`, and neither is
+visible. A naive `PATH` lookup would therefore fail for nearly every user of a
+downloaded build.
+
+So when a tool is not on `PATH`, the shell also looks in the places Node is
+actually installed:
+
+| Platform | Directories searched after `PATH` |
+|---|---|
+| macOS | `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin` |
+| Linux | `/usr/local/bin`, `/usr/bin`, `/snap/bin` |
+| Windows | `%ProgramFiles%\nodejs`, `%LOCALAPPDATA%\Programs\nodejs`, `%LOCALAPPDATA%\Volta\bin`, `%APPDATA%\npm` |
+| All | `~/.volta/bin`, `~/.asdf/shims`, `~/.local/bin`, plus every nvm and fnm version directory, newest version first |
+
+The directory Node was found in is prepended to the backend's own `PATH`, so
+the tool subprocesses the agent spawns inherit the same installation. Set
+`DSH_DESKTOP_NODE` to skip the search entirely.
 
 ## Configuration
 
 | Variable | Default | Effect |
 |---|---|---|
 | `DSH_DESKTOP_BACKEND` | *(unset)* | Override the backend command — an absolute path to a `dsh` executable, or to a `.js`/`.mjs`/`.cjs` entry point that will be run through `node`. |
+| `DSH_DESKTOP_NODE` | *(unset)* | Absolute path to the `node` binary to use, skipping the search described above. |
 | `DSH_DESKTOP_PORT` | `0` | Pin the server port. `0` lets the OS assign a free one, so two copies never collide. |
 
 Everything else — API keys, models, sessions, plugins — is configured **inside the harness UI** and stored by the harness itself, exactly as in the browser. The shell holds no configuration of its own. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full reference.
@@ -184,6 +232,10 @@ docs/                      architecture, development, configuration, troubleshoo
 - **`app.security.csp` is `null` on purpose.** The harness UI evaluates client-side Cordis plugin code and opens a WebSocket to its own loopback origin; a restrictive CSP would break both. The window only ever loads `http://127.0.0.1:<port>` — see [SECURITY.md](SECURITY.md) for the full reasoning.
 - **The port defaults to `0`.** The shell always reads the URL the server announces rather than assuming a port, so multiple instances coexist.
 - **Shutdown kills a process group, not a process.** The harness spawns shell tool subprocesses; killing only the server PID would strand them. On Unix the child is started as its own group leader and receives `SIGTERM` to the negated PID; on Windows the equivalent is `taskkill /T /F`.
+- **Node is found, not bundled.** Shipping a Node runtime would double the
+  download and pin users to one version. Instead the shell looks Node up the
+  way a shell would, plus the directories a GUI launcher hides — see
+  [Finding Node](#finding-node).
 - **The shell is stateless.** No database, no config file, no IPC commands exposed to the webview. If a feature belongs to the agent, it belongs upstream in the harness.
 
 ## Contributing

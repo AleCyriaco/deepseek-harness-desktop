@@ -22,6 +22,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../backend/node_modules/": "backend/node_modules/"
+    },
+    "category": "DeveloperTool",
+    "shortDescription": "Native desktop shell for the DeepSeek Harness",
+    "longDescription": "Runs the DeepSeek Harness web GUI in a native window, backed by the stock `dsh web` server started as a child process.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
   }
 }

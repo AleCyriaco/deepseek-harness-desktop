@@ -79,6 +79,7 @@ To run an already-built debug binary without going through the CLI:
 | `npm run setup` | `npm install` + `npm run backend:install`. |
 | `npm run backend:install` | Installs `@deepseek-ai/dsh` into `backend/node_modules` (pnpm → bun → npm). |
 | `npm run dev` | `tauri dev` — debug build, opens the window. |
+| `npm run build -- --target universal-apple-darwin` | Universal macOS bundle. |
 | `npm run build` | `tauri build` — release build and platform bundles. |
 | `npm run tauri` | Raw passthrough to the Tauri CLI, e.g. `npm run tauri icon app-icon.png`. |
 
@@ -152,8 +153,21 @@ that a fresh clone builds without running this step.
 
 ## Building distributables
 
+`npm run backend:install` is a **prerequisite**, not an optional step: the
+bundle config copies `backend/node_modules/` into the app resources so the
+packaged app is self-contained.
+
 ```sh
+npm run backend:install
 npm run build
+```
+
+For a universal macOS binary (Apple Silicon + Intel), add both Rust targets and
+pass the universal target:
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm run build -- --target universal-apple-darwin
 ```
 
 Bundles land in `src-tauri/target/release/bundle/`:
@@ -167,10 +181,9 @@ Bundles land in `src-tauri/target/release/bundle/`:
 Tauri does not cross-compile GUI bundles: each platform must be built on that
 platform (or in a CI runner for it).
 
-To produce a self-contained app that does not need `dsh` on the target machine,
-add the `bundle.resources` entry described in the
-[README](../README.md#shipping-a-self-contained-app) and run
-`npm run backend:install` first.
+To build a slim app that resolves `dsh` on the target machine instead, remove
+the `bundle.resources` entry from `src-tauri/tauri.conf.json` — see
+[Shipping a self-contained app](../README.md#shipping-a-self-contained-app).
 
 ### Code signing
 

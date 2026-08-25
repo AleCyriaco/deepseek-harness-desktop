@@ -7,7 +7,10 @@
 //! process group down so no orphaned server survives the window.
 
 use std::{
+    cmp::Reverse,
     env,
+    ffi::OsStr,
+    fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -23,6 +26,12 @@ const READY_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// The exact prefix the web app prints when it is listening.
 const URL_PREFIX: &str = "http://127.0.0.1:";
+
+/// Executable extensions to try when looking a command up by name.
+#[cfg(windows)]
+const EXE_EXTS: &[&str] = &[".exe", ".cmd", ".bat", ""];
+#[cfg(not(windows))]
+const EXE_EXTS: &[&str] = &[""];
 
 /// A live `dsh web` process plus enough state to kill its whole tree later.
 pub struct Backend {
@@ -65,32 +74,184 @@ fn extract_url(line: &str) -> Option<String> {
     }
 }
 
+/// Parse a Node version directory name (`v20.11.0`, `20.11.0`) into a sortable
+/// triple. Anything unparseable sorts last as `(0, 0, 0)`.
+fn parse_version(name: &str) -> (u32, u32, u32) {
+    let mut parts = name.trim_start_matches('v').split('.');
+    let mut next = || {
+        parts
+            .next()
+            .and_then(|p| p.split(|c: char| !c.is_ascii_digit()).next())
+            .and_then(|p| p.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
+    (next(), next(), next())
+}
+
+/// `bin` directories of Node installs managed by nvm or fnm, newest first.
+///
+/// Version managers install outside every system directory, so a packaged app
+/// would never find them without looking here explicitly.
+fn version_manager_bin_dirs(home: &Path) -> Vec<PathBuf> {
+    let roots = [
+        home.join(".nvm").join("versions").join("node"),
+        home.join(".local")
+            .join("share")
+            .join("fnm")
+            .join("node-versions"),
+        home.join("Library")
+            .join("Application Support")
+            .join("fnm")
+            .join("node-versions"),
+    ];
+
+    let mut found: Vec<((u32, u32, u32), PathBuf)> = Vec::new();
+    for root in roots {
+        let Ok(entries) = fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let version = parse_version(&entry.file_name().to_string_lossy());
+            let dir = entry.path();
+            // nvm keeps `bin` at the top; fnm nests it under `installation`.
+            found.push((version, dir.join("bin")));
+            found.push((version, dir.join("installation").join("bin")));
+        }
+    }
+
+    found.sort_by_key(|(version, _)| Reverse(*version));
+    found.into_iter().map(|(_, dir)| dir).collect()
+}
+
+/// Directories to search when a tool is not on `PATH`.
+///
+/// This list exists because of one specific failure: a macOS `.app` launched
+/// from Finder inherits launchd's minimal `PATH` (`/usr/bin:/bin:/usr/sbin:
+/// /sbin`), which contains no Node installation at all. Without these
+/// fallbacks a packaged app would fail to start for every user who installed
+/// Node with Homebrew, MacPorts, nvm, fnm, Volta or asdf — which is nearly
+/// everyone. The same reasoning applies to Linux desktop launchers.
+fn extra_bin_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/opt/local/bin")); // MacPorts
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/usr/bin"));
+        dirs.push(PathBuf::from("/snap/bin"));
+    }
+    #[cfg(windows)]
+    {
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            dirs.push(Path::new(&program_files).join("nodejs"));
+        }
+        if let Some(local) = env::var_os("LOCALAPPDATA") {
+            dirs.push(Path::new(&local).join("Programs").join("nodejs"));
+            dirs.push(Path::new(&local).join("Volta").join("bin"));
+        }
+        if let Some(appdata) = env::var_os("APPDATA") {
+            dirs.push(Path::new(&appdata).join("npm"));
+        }
+    }
+
+    if let Some(home) = env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")) {
+        let home = PathBuf::from(home);
+        dirs.push(home.join(".volta").join("bin"));
+        dirs.push(home.join(".asdf").join("shims"));
+        dirs.push(home.join(".local").join("bin"));
+        dirs.extend(version_manager_bin_dirs(&home));
+    }
+
+    dirs
+}
+
 /// Look a command up on `PATH`, honouring Windows executable extensions.
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
-    #[cfg(windows)]
-    let exts: &[&str] = &[".exe", ".cmd", ".bat", ""];
-    #[cfg(not(windows))]
-    let exts: &[&str] = &[""];
-
     for dir in env::split_paths(&path) {
-        for ext in exts {
-            let candidate = dir.join(format!("{name}{ext}"));
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+        if let Some(found) = probe_dir(&dir, name) {
+            return Some(found);
         }
     }
     None
 }
 
+/// Return `<dir>/<name><ext>` for the first extension that is a real file.
+fn probe_dir(dir: &Path, name: &str) -> Option<PathBuf> {
+    for ext in EXE_EXTS {
+        let candidate = dir.join(format!("{name}{ext}"));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// Resolve a command by name: `PATH` first, then the well-known install
+/// directories a GUI launcher does not put on `PATH`.
+fn find_tool(name: &str) -> Option<PathBuf> {
+    find_on_path(name).or_else(|| extra_bin_dirs().iter().find_map(|dir| probe_dir(dir, name)))
+}
+
+/// Locate the Node interpreter, honouring `DSH_DESKTOP_NODE`.
+fn find_node() -> Option<PathBuf> {
+    if let Some(explicit) = non_empty_env("DSH_DESKTOP_NODE") {
+        return Some(PathBuf::from(explicit));
+    }
+    find_tool("node")
+}
+
+/// Read an environment variable, treating blank values as unset.
+fn non_empty_env(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// Does this path look like a JavaScript entry point rather than a binary?
+fn is_js_entry(path: &str) -> bool {
+    [".js", ".mjs", ".cjs"]
+        .iter()
+        .any(|ext| path.ends_with(ext))
+}
+
+/// Prepend a directory to the child's `PATH`.
+///
+/// The harness spawns its own tool subprocesses (`npm`, `npx`, language
+/// servers) which expect to find Node the same way we did. Handing them the
+/// resolved directory keeps them working under a Finder-launched app.
+fn prepend_path(cmd: &mut Command, dir: &Path) {
+    let mut dirs = vec![dir.to_path_buf()];
+    if let Some(existing) = env::var_os("PATH") {
+        dirs.extend(env::split_paths(&existing));
+    }
+    if let Ok(joined) = env::join_paths(dirs) {
+        cmd.env("PATH", joined);
+    }
+}
+
+/// Build a `Command` for an executable, exposing its own directory to the
+/// child so sibling tools remain reachable.
+fn command_at(program: &Path) -> Command {
+    let mut cmd = Command::new(program);
+    if let Some(dir) = program.parent() {
+        if !dir.as_os_str().is_empty() {
+            prepend_path(&mut cmd, dir);
+        }
+    }
+    cmd
+}
+
 /// Append the `web --no-open --port <port>` arguments to a command.
 fn add_web_args(cmd: &mut Command) {
-    let port = env::var("DSH_DESKTOP_PORT")
-        .ok()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or_else(|| "0".to_string());
-
+    let port = non_empty_env("DSH_DESKTOP_PORT").unwrap_or_else(|| "0".to_string());
     cmd.arg("web").arg("--no-open").arg("--port").arg(port);
 }
 
@@ -99,60 +260,71 @@ fn add_web_args(cmd: &mut Command) {
 /// 1. `DSH_DESKTOP_BACKEND` — explicit path to a `dsh` executable or to a
 ///    `.js`/`.mjs`/`.cjs` entry run through `node`.
 /// 2. A bundled backend under `<root>/backend/node_modules/@deepseek-ai/dsh`.
-/// 3. `dsh` on `PATH`.
+/// 3. `dsh` on `PATH` (or in a well-known install directory).
 /// 4. `npx --yes @deepseek-ai/dsh@latest`.
 fn build_command(search_roots: &[PathBuf]) -> Result<Command, String> {
-    if let Ok(backend) = env::var("DSH_DESKTOP_BACKEND") {
-        let backend = backend.trim().to_string();
-        if !backend.is_empty() {
-            let mut cmd = if backend.ends_with(".js")
-                || backend.ends_with(".mjs")
-                || backend.ends_with(".cjs")
-            {
-                let mut c = Command::new("node");
-                c.arg(&backend);
-                c
-            } else {
-                Command::new(&backend)
-            };
-            add_web_args(&mut cmd);
-            return Ok(cmd);
-        }
-    }
+    let node = find_node();
 
-    for root in search_roots {
-        let bin = root
-            .join("backend")
-            .join("node_modules")
-            .join("@deepseek-ai")
-            .join("dsh")
-            .join("lib")
-            .join("bin.js");
-        if bin.is_file() {
-            let mut cmd = Command::new("node");
-            cmd.arg(bin);
-            add_web_args(&mut cmd);
-            return Ok(cmd);
-        }
-    }
-
-    if let Some(dsh) = find_on_path("dsh") {
-        let mut cmd = Command::new(dsh);
+    if let Some(backend) = non_empty_env("DSH_DESKTOP_BACKEND") {
+        let mut cmd = if is_js_entry(&backend) {
+            let node = node.ok_or_else(|| missing_node_message("DSH_DESKTOP_BACKEND"))?;
+            let mut cmd = command_at(&node);
+            cmd.arg(&backend);
+            cmd
+        } else {
+            command_at(Path::new(&backend))
+        };
         add_web_args(&mut cmd);
         return Ok(cmd);
     }
 
-    if let Some(npx) = find_on_path("npx") {
-        let mut cmd = Command::new(npx);
+    if let Some(node) = node.as_ref() {
+        for root in search_roots {
+            let bin = root
+                .join("backend")
+                .join("node_modules")
+                .join("@deepseek-ai")
+                .join("dsh")
+                .join("lib")
+                .join("bin.js");
+            if bin.is_file() {
+                let mut cmd = command_at(node);
+                cmd.arg(bin);
+                add_web_args(&mut cmd);
+                return Ok(cmd);
+            }
+        }
+    }
+
+    if let Some(dsh) = find_tool("dsh") {
+        let mut cmd = command_at(&dsh);
+        add_web_args(&mut cmd);
+        return Ok(cmd);
+    }
+
+    if let Some(npx) = find_tool("npx") {
+        let mut cmd = command_at(&npx);
         cmd.args(["--yes", "@deepseek-ai/dsh@latest"]);
         add_web_args(&mut cmd);
         return Ok(cmd);
+    }
+
+    if node.is_none() {
+        return Err(missing_node_message("the bundled backend"));
     }
 
     Err(
         "no DeepSeek Harness backend found: set DSH_DESKTOP_BACKEND, run `npm run backend:install`, \
          or install Node.js and `dsh`"
             .to_string(),
+    )
+}
+
+/// The diagnostic shown when Node cannot be located anywhere.
+fn missing_node_message(needed_by: &str) -> String {
+    format!(
+        "Node.js not found, which {needed_by} requires. Install Node.js 20 or newer, \
+         or set DSH_DESKTOP_NODE to the full path of the `node` binary."
     )
 }
 
@@ -171,9 +343,20 @@ fn terminate_group(pid: u32) {
         .output();
 }
 
+/// Render a command as a readable string for diagnostics.
+fn describe(cmd: &Command) -> String {
+    let args: Vec<String> = cmd
+        .get_args()
+        .map(OsStr::to_string_lossy)
+        .map(|arg| arg.into_owned())
+        .collect();
+    format!("{} {}", cmd.get_program().to_string_lossy(), args.join(" "))
+}
+
 /// Start the backend and block until it announces its URL.
 pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), String> {
     let mut cmd = build_command(search_roots)?;
+    let description = describe(&cmd);
 
     // Run the server as its own process-group leader so `terminate_group` can
     // reap the bash/pwsh tool subprocesses it spawns later.
@@ -185,9 +368,9 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
 
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("failed to start the DeepSeek Harness backend: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        format!("failed to start the DeepSeek Harness backend ({description}): {e}")
+    })?;
     let pid = child.id();
 
     let stdout = child.stdout.take();
@@ -195,8 +378,10 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
 
     // Drain both streams on a background thread. The first URL line is
     // forwarded; everything after keeps being drained so a full pipe can never
-    // stall the server.
+    // stall the server. Recent stderr is kept so a failed start can explain
+    // itself instead of reporting a bare timeout.
     let (tx, rx) = mpsc::channel::<String>();
+    let (err_tx, err_rx) = mpsc::channel::<String>();
     thread::spawn(move || {
         let mut announced = false;
         if let Some(stdout) = stdout {
@@ -208,11 +393,8 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
                         let _ = tx.send(url);
                     }
                 }
-                if announced {
-                    // Keep draining; log in debug builds only.
-                    #[cfg(debug_assertions)]
-                    eprintln!("[dsh web] {line}");
-                }
+                #[cfg(debug_assertions)]
+                eprintln!("[dsh web] {line}");
             }
         }
         if let Some(stderr) = stderr {
@@ -220,26 +402,36 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
             for line in reader.lines().map_while(Result::ok) {
                 #[cfg(debug_assertions)]
                 eprintln!("[dsh web] {line}");
+                let _ = err_tx.send(line);
             }
         }
     });
 
+    let fail = |pid: u32, child: &mut Child, reason: String| -> String {
+        terminate_group(pid);
+        let _ = child.kill();
+        let _ = child.wait();
+        let tail: Vec<String> = err_rx.try_iter().collect();
+        if tail.is_empty() {
+            reason
+        } else {
+            let tail = tail[tail.len().saturating_sub(10)..].join("\n  ");
+            format!("{reason}\n  {tail}")
+        }
+    };
+
     let url = match rx.recv_timeout(READY_TIMEOUT) {
         Ok(url) => url,
         Err(mpsc::RecvTimeoutError::Timeout) => {
-            terminate_group(pid);
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!(
-                "backend did not become ready within {}s",
+            let reason = format!(
+                "backend did not become ready within {}s ({description})",
                 READY_TIMEOUT.as_secs()
-            ));
+            );
+            return Err(fail(pid, &mut child, reason));
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
-            terminate_group(pid);
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("backend exited before announcing its URL".to_string());
+            let reason = format!("backend exited before announcing its URL ({description})");
+            return Err(fail(pid, &mut child, reason));
         }
     };
 
@@ -286,7 +478,7 @@ pub fn search_roots(app: &tauri::App) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_url;
+    use super::{extract_url, is_js_entry, parse_version};
 
     #[test]
     fn extracts_announced_loopback_url() {
@@ -308,5 +500,29 @@ mod tests {
     fn ignores_unrelated_lines() {
         assert_eq!(extract_url("listening on 127.0.0.1"), None);
         assert_eq!(extract_url(""), None);
+    }
+
+    #[test]
+    fn parses_node_version_directory_names() {
+        assert_eq!(parse_version("v20.11.0"), (20, 11, 0));
+        assert_eq!(parse_version("22.3.1"), (22, 3, 1));
+        assert_eq!(parse_version("v18"), (18, 0, 0));
+        assert_eq!(parse_version("not-a-version"), (0, 0, 0));
+    }
+
+    #[test]
+    fn orders_node_versions_numerically_not_lexically() {
+        // The bug this guards: "v9" sorts after "v20" as a string.
+        let mut names = ["v9.0.0", "v20.11.0", "v18.19.1"];
+        names.sort_by_key(|n| std::cmp::Reverse(parse_version(n)));
+        assert_eq!(names, ["v20.11.0", "v18.19.1", "v9.0.0"]);
+    }
+
+    #[test]
+    fn recognises_javascript_entry_points() {
+        assert!(is_js_entry("/path/lib/bin.js"));
+        assert!(is_js_entry("/path/lib/bin.mjs"));
+        assert!(is_js_entry("/path/lib/bin.cjs"));
+        assert!(!is_js_entry("/usr/local/bin/dsh"));
     }
 }

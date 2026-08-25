@@ -1,6 +1,6 @@
 # Configuration reference
 
-The desktop shell is deliberately configuration-free. It exposes exactly two
+The desktop shell is deliberately configuration-free. It exposes exactly three
 environment variables, and everything else — API keys, model selection,
 sessions, plugins, permissions — is configured **inside the harness UI** and
 stored by the harness, identically to the browser version.
@@ -8,6 +8,7 @@ stored by the harness, identically to the browser version.
 ## Contents
 
 - [Environment variables](#environment-variables)
+- [How Node is located](#how-node-is-located)
 - [Where harness state lives](#where-harness-state-lives)
 - [Files that configure the build](#files-that-configure-the-build)
 - [Recipes](#recipes)
@@ -29,6 +30,19 @@ DSH_DESKTOP_BACKEND=/src/deepseek-harness/lib/bin.js   npm run dev
 An empty or whitespace-only value is ignored, and resolution falls through to
 the next source. The value is **not** shell-parsed: it is a single path, not a
 command line, so `"node foo.js --flag"` will not work.
+
+### `DSH_DESKTOP_NODE`
+
+Absolute path to the `node` binary the shell should use, skipping the search
+described in [How Node is located](#how-node-is-located) entirely.
+
+```sh
+DSH_DESKTOP_NODE=/opt/homebrew/bin/node npm run dev
+```
+
+Use it when you have several Node versions installed and want to guarantee
+which one the harness runs under, or when your installation lives somewhere the
+search does not cover. An empty or whitespace-only value is ignored.
 
 ### `DSH_DESKTOP_PORT`
 
@@ -61,6 +75,35 @@ desktop is usually the OS launcher rather than your shell.
 - **Linux** — set it in the `.desktop` entry's `Exec=` line, or export it in
   the shell you launch from.
 
+## How Node is located
+
+The harness is a Node program, so the shell has to find a `node` binary before
+it can start anything. It looks in this order:
+
+1. `DSH_DESKTOP_NODE`, if set.
+2. Every directory on `PATH`.
+3. The well-known install locations below.
+
+| Platform | Directories |
+|---|---|
+| macOS | `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin` |
+| Linux | `/usr/local/bin`, `/usr/bin`, `/snap/bin` |
+| Windows | `%ProgramFiles%\nodejs`, `%LOCALAPPDATA%\Programs\nodejs`, `%LOCALAPPDATA%\Volta\bin`, `%APPDATA%\npm` |
+| All | `~/.volta/bin`, `~/.asdf/shims`, `~/.local/bin` |
+| All | every nvm (`~/.nvm/versions/node/*/bin`) and fnm version directory, sorted by version, **newest first** |
+
+Step 3 exists for one specific reason: a macOS `.app` launched from Finder
+inherits launchd's `PATH`, which is `/usr/bin:/bin:/usr/sbin:/sbin` and
+contains no Node installation. Relying on `PATH` alone would make every
+downloaded build fail to start.
+
+The same search resolves `dsh` and `npx` in backend resolution steps 3 and 4.
+
+Whatever directory the tool is found in is **prepended to the backend's own
+`PATH`**, so the tool subprocesses the agent spawns (`npm`, `npx`, language
+servers) inherit the same Node installation rather than falling back to a
+different one — or to none.
+
 ## Where harness state lives
 
 The shell writes nothing. Sessions, credentials and settings are stored by the
@@ -81,6 +124,19 @@ documentation). Two consequences worth knowing:
 | `src-tauri/capabilities/default.json` | The Tauri permission set granted to the `main` window — currently `core:default` only. |
 | `package.json` | The npm scripts and the Tauri CLI version. |
 | `backend/package.json` | The `@deepseek-ai/dsh` semver range installed by `npm run backend:install`. |
+
+### Bundling the backend
+
+```json
+"bundle": {
+  "resources": { "../backend/node_modules/": "backend/node_modules/" }
+}
+```
+
+This is enabled by default, and it is why `npm run backend:install` must run
+before `npm run build`: the packaged app carries its own harness runtime
+(~270 MB) and needs no `dsh` on the target machine. Remove the entry to build a
+slim app that resolves `dsh` at runtime instead.
 
 ### Notable settings in `tauri.conf.json`
 
@@ -135,6 +191,12 @@ DSH_DESKTOP_PORT=5173 npm run dev
 # ensure backend/node_modules is absent and `dsh` is not on PATH
 rm -rf backend/node_modules
 env -u DSH_DESKTOP_BACKEND npm run dev
+```
+
+**Pin a specific Node version**
+
+```sh
+DSH_DESKTOP_NODE="$HOME/.nvm/versions/node/v20.11.0/bin/node" npm run dev
 ```
 
 **Diagnose a backend that will not start**

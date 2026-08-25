@@ -24,13 +24,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            label: macOS (Apple Silicon)
-            args: --target aarch64-apple-darwin
-            rust-targets: aarch64-apple-darwin
-          - os: macos-latest
-            label: macOS (Intel)
-            args: --target x86_64-apple-darwin
-            rust-targets: x86_64-apple-darwin
+            label: macOS (universal)
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: ubuntu-latest
             label: Linux
             args: ''
@@ -75,6 +71,12 @@ jobs:
       - name: Install the Tauri CLI
         run: npm ci || npm install
 
+      # The bundle config ships backend/node_modules/ inside the app, so the
+      # released build is self-contained and needs no `dsh` on the user's
+      # machine. Without this step the resource copy would fail.
+      - name: Install the bundled harness runtime
+        run: npm run backend:install
+
       - name: Build and draft the release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -85,8 +87,16 @@ jobs:
           releaseBody: |
             See [CHANGELOG.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/CHANGELOG.md) for what changed.
 
-            These bundles are unsigned: on macOS you may need
-            `xattr -dr com.apple.quarantine "DeepSeek Harness Desktop.app"`.
+            The harness runtime is bundled inside each build, so the only
+            requirement on your machine is **Node.js 20 or newer**. The macOS
+            build is a universal binary (Apple Silicon and Intel).
+
+            These bundles are unsigned, so macOS quarantines them on first
+            launch:
+
+            ```
+            xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
+            ```
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

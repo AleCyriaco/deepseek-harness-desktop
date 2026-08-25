@@ -37,6 +37,22 @@ invisible to the app. Bundle the backend (see the
 [README](../README.md#shipping-a-self-contained-app)) or set
 `DSH_DESKTOP_BACKEND` explicitly.
 
+### `Node.js not found, which … requires`
+
+No `node` binary was found on `PATH` or in any of the
+[searched install directories](CONFIGURATION.md#how-node-is-located). Either
+install Node 20+, or point the app straight at it:
+
+```sh
+DSH_DESKTOP_NODE=/opt/homebrew/bin/node open -a "DeepSeek Harness Desktop"
+```
+
+If `node -v` works in your terminal but the packaged app still reports this,
+your Node lives somewhere the search does not cover — `DSH_DESKTOP_NODE` is the
+fix, and the install location is worth
+[reporting](https://github.com/AleCyriaco/dsh-desktop/issues) so it can be
+added.
+
 ### `failed to start the DeepSeek Harness backend: …`
 
 The command was found but could not be executed. Usual causes: the file is not
@@ -49,6 +65,8 @@ The backend started but never printed `http://127.0.0.1:<port>`. Common causes:
 
 - The `npx` bootstrap path is downloading the package on a slow connection —
   run `npm run backend:install` once so resolution takes the fast local path.
+- The error message now includes the exact command that was run and the last
+  lines the backend wrote to stderr; read those first.
 - `DSH_DESKTOP_PORT` names a port already in use, so the server exits before
   announcing. Unset it and let the OS assign one.
 - The harness itself is failing at startup — reproduce it directly with the

@@ -62,12 +62,19 @@ and is identical to what the browser version stores.
    │                                             │
    ├─────────────────────────────────────▶ spawn_backend(roots)
    │                                          │
+   │                                          ├─ find_node()
+   │                                          │    $DSH_DESKTOP_NODE
+   │                                          │    PATH
+   │                                          │    extra_bin_dirs()  ← Homebrew, nvm,
+   │                                          │      fnm, Volta, asdf, MacPorts, …
+   │                                          │
    │                                          ├─ build_command(roots)
    │                                          │    1. $DSH_DESKTOP_BACKEND
    │                                          │    2. bundled bin.js
-   │                                          │    3. `dsh` on PATH
+   │                                          │    3. `dsh` (PATH + extra dirs)
    │                                          │    4. `npx --yes @deepseek-ai/dsh@latest`
    │                                          │    (+ `web --no-open --port $DSH_DESKTOP_PORT|0`)
+   │                                          │    (+ PATH prepended with the tool's dir)
    │                                          │
    │                                          ├─ process_group(0)      [unix]
    │                                          ├─ spawn with piped stdout/stderr
@@ -158,6 +165,13 @@ user never sees an empty frame pointed at nothing.
 | `Backend` | Owns the `Child` plus its PID/PGID; implements `shutdown` and `Drop`. |
 | `extract_url` | Pulls the loopback URL out of a stdout line. Unit-tested. |
 | `find_on_path` | `PATH` lookup that honours `.exe`/`.cmd`/`.bat` on Windows. |
+| `extra_bin_dirs` | Well-known install directories a GUI launcher does not put on `PATH`. |
+| `version_manager_bin_dirs` | nvm and fnm version directories, newest first. |
+| `parse_version` | Turns `v20.11.0` into a sortable triple. Unit-tested. |
+| `find_tool` | `find_on_path`, then `extra_bin_dirs`. |
+| `find_node` | `DSH_DESKTOP_NODE`, then `find_tool("node")`. |
+| `prepend_path` | Puts the resolved tool's directory on the child's `PATH`. |
+| `describe` | Renders the resolved command for diagnostics. |
 | `add_web_args` | Appends `web --no-open --port <port>`. |
 | `build_command` | The four-step backend resolution. |
 | `terminate_group` | Platform-specific group/tree kill. |
@@ -218,6 +232,30 @@ after the URL is found. If it stopped, a full pipe buffer would block the
 server's next write and silently hang the harness. Post-announcement lines are
 echoed to stderr in debug builds only.
 
+### Looking beyond `PATH` for Node
+
+This is the least obvious code in the project and it exists for one concrete
+failure. A macOS `.app` launched from Finder does not inherit your shell
+environment; it inherits launchd's, whose `PATH` is
+`/usr/bin:/bin:/usr/sbin:/sbin`. Homebrew installs Node in `/opt/homebrew/bin`
+and nvm under `~/.nvm` — neither is on that list. A build that only consulted
+`PATH` therefore started fine from a terminal and failed for every user who
+double-clicked it, which is the worst possible split between how it is
+developed and how it is used.
+
+`extra_bin_dirs` enumerates the places Node is actually installed, and
+`version_manager_bin_dirs` walks nvm and fnm version directories sorted
+**numerically** — a lexical sort would rank `v9` above `v20`, which
+`orders_node_versions_numerically_not_lexically` guards against.
+
+The resolved directory is then prepended to the child's `PATH`, because the
+harness spawns its own `npm`/`npx`/language-server subprocesses that need the
+same Node the shell just found.
+
+Shipping a Node runtime inside the bundle would sidestep all of this, at the
+cost of doubling the download and pinning every user to one version. Finding
+the user's own Node is the better trade.
+
 ### Four backend resolution paths
 
 Each path serves a distinct scenario: `DSH_DESKTOP_BACKEND` for developing
@@ -229,9 +267,10 @@ as a last-resort bootstrap that works on a machine with nothing but Node.
 
 | Condition | Behaviour |
 |---|---|
+| Node not found anywhere | `build_command` returns `Err` naming `DSH_DESKTOP_NODE` as the escape hatch; exit `1`. |
 | No backend resolvable | `build_command` returns `Err`; the message names all three fixes; exit `1`. |
-| Backend spawns but never prints a URL | `recv_timeout` times out after 45 s; group killed; exit `1`. |
-| Backend exits early (bad args, crash) | The channel disconnects when the reader thread ends; group killed; exit `1`. |
+| Backend spawns but never prints a URL | `recv_timeout` times out after 45 s; group killed; the resolved command and the last stderr lines are included in the error; exit `1`. |
+| Backend exits early (bad args, crash) | The channel disconnects when the reader thread ends; group killed; stderr tail reported; exit `1`. |
 | Announced URL is unparseable | `create_main_window` returns `Err`; backend shut down; exit `1`. |
 | App killed with `SIGKILL` | Neither `RunEvent::Exit` nor `Drop` runs — the server is orphaned. This is unavoidable; `SIGKILL` cannot be handled. |
 
