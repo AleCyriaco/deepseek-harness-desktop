@@ -1,0 +1,36 @@
+{
+  "name": "dsh-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Native cross-platform desktop shell (Rust + Tauri v2) for the DeepSeek Harness web GUI",
+  "license": "MIT",
+  "author": "Alexandre Cyriaco",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AleCyriaco/dsh-desktop.git"
+  },
+  "homepage": "https://github.com/AleCyriaco/dsh-desktop#readme",
+  "bugs": {
+    "url": "https://github.com/AleCyriaco/dsh-desktop/issues"
+  },
+  "keywords": [
+    "tauri",
+    "rust",
+    "desktop",
+    "deepseek",
+    "dsh",
+    "deepseek-harness",
+    "webview"
+  ],
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "backend:install": "node scripts/install-backend.mjs",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "setup": "npm install && npm run backend:install"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DeepSeek Harness Desktop</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #0f1115;
+        color: #e6e8eb;
+      }
+      main {
+        text-align: center;
+        padding: 2rem;
+      }
+      .dot {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        margin: 0 3px;
+        border-radius: 50%;
+        background: #4d6bfe;
+        animation: pulse 1.2s infinite ease-in-out;
+      }
+      .dot:nth-child(2) { animation-delay: 0.2s; }
+      .dot:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes pulse {
+        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+        40% { transform: scale(1); opacity: 1; }
+      }
+      h1 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 0.35rem; }
+      p { color: #9aa0a8; font-size: 0.9rem; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div aria-hidden="true">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+      <h1>Starting DeepSeek Harness&hellip;</h1>
+      <p>This page is only shown if the native window could not reach the harness.</p>
+    </main>
+  </body>
+</html>

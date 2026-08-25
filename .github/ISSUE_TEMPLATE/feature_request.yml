@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest something for the desktop shell
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is a **thin native shell** around the DeepSeek Harness.
+        Features about chat, sessions, models, tools, plugins or settings belong
+        upstream in [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness).
+        Features only a native shell can provide — window behaviour, menus, tray,
+        packaging, auto-update, backend lifecycle — belong here. See
+        [CONTRIBUTING.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/CONTRIBUTING.md#scope-what-belongs-here).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that is awkward or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is about the native shell, not the harness agent itself.
+          required: true

@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in the desktop shell does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please run the isolation test from
+        [docs/TROUBLESHOOTING.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/docs/TROUBLESHOOTING.md#is-it-the-shell-or-the-harness)
+        so we know whether the bug is in this shell or upstream in the harness.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: stderr output
+      description: >
+        Run the app from a terminal and paste everything it printed. Shell
+        diagnostics are prefixed with `dsh-desktop:`; backend output in a dev
+        build is prefixed with `[dsh web]`.
+      render: shell
+
+  - type: dropdown
+    id: build-type
+    attributes:
+      label: Build type
+      options:
+        - Dev build (npm run dev)
+        - Packaged bundle built locally
+        - Packaged bundle from a release
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Which backend is in use
+      options:
+        - Bundled (npm run backend:install)
+        - dsh on PATH
+        - npx fallback
+        - DSH_DESKTOP_BACKEND override
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and version, plus the output of `node -v` and `rustc -V`.
+      placeholder: |
+        OS: macOS 15.2 (Apple Silicon)
+        node -v: v22.11.0
+        rustc -V: rustc 1.83.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: isolation
+    attributes:
+      label: Isolation test result
+      description: >
+        Does `node backend/node_modules/@deepseek-ai/dsh/lib/bin.js web --no-open --port 0`
+        print a loopback URL and work in a browser?
