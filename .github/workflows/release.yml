@@ -85,7 +85,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: DeepSeek Harness Desktop ${{ github.ref_name }}
           releaseBody: |
-            See [CHANGELOG.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/CHANGELOG.md) for what changed.
+            See [CHANGELOG.md](https://github.com/AleCyriaco/deepseek-harness-desktop/blob/main/CHANGELOG.md) for what changed.
 
             The harness runtime is bundled inside each build, so the only
             requirement on your machine is **Node.js 20 or newer**. The macOS

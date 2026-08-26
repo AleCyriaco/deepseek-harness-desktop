@@ -10,7 +10,7 @@ body:
         upstream in [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness).
         Features only a native shell can provide — window behaviour, menus, tray,
         packaging, auto-update, backend lifecycle — belong here. See
-        [CONTRIBUTING.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/CONTRIBUTING.md#scope-what-belongs-here).
+        [CONTRIBUTING.md](https://github.com/AleCyriaco/deepseek-harness-desktop/blob/main/CONTRIBUTING.md#scope-what-belongs-here).
 
   - type: textarea
     id: problem

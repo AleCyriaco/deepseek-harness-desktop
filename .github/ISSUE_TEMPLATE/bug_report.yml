@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Before filing, please run the isolation test from
-        [docs/TROUBLESHOOTING.md](https://github.com/AleCyriaco/dsh-desktop/blob/main/docs/TROUBLESHOOTING.md#is-it-the-shell-or-the-harness)
+        [docs/TROUBLESHOOTING.md](https://github.com/AleCyriaco/deepseek-harness-desktop/blob/main/docs/TROUBLESHOOTING.md#is-it-the-shell-or-the-harness)
         so we know whether the bug is in this shell or upstream in the harness.
 
   - type: textarea

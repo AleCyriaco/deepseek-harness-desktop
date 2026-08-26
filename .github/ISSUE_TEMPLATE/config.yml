@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/deepseek-ai/deepseek-harness/issues
     about: Chat, sessions, models, tools, plugins and settings live upstream — report those there.
   - name: Security vulnerability
-    url: https://github.com/AleCyriaco/dsh-desktop/security/advisories/new
+    url: https://github.com/AleCyriaco/deepseek-harness-desktop/security/advisories/new
     about: Please report vulnerabilities privately, not as a public issue.

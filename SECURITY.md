@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/AleCyriaco/dsh-desktop/security/advisories/new)
+[GitHub Security Advisories](https://github.com/AleCyriaco/deepseek-harness-desktop/security/advisories/new)
 rather than in a public issue. Please include reproduction steps and the
 affected version, and give the maintainer a reasonable window to respond before
 disclosing publicly.

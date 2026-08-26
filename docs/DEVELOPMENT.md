@@ -37,7 +37,7 @@ Plus the platform prerequisites listed at
 ## First-time setup
 
 ```sh
-git clone https://github.com/AleCyriaco/dsh-desktop.git
+git clone https://github.com/AleCyriaco/deepseek-harness-desktop.git
 cd dsh-desktop
 npm run setup   # npm install && npm run backend:install
 ```

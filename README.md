@@ -1,6 +1,6 @@
 # DeepSeek Harness Desktop
 
-[![CI](https://github.com/AleCyriaco/dsh-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/AleCyriaco/dsh-desktop/actions/workflows/ci.yml)
+[![CI](https://github.com/AleCyriaco/deepseek-harness-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/AleCyriaco/deepseek-harness-desktop/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://www.rust-lang.org)
@@ -17,7 +17,7 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 
 ## Download
 
-Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/dsh-desktop/releases). The macOS build is a **universal binary** (Apple Silicon and Intel) with the harness runtime bundled inside, so the only thing it needs on your machine is **Node.js 20 or newer**.
+Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). The macOS build is a **universal binary** (Apple Silicon and Intel) with the harness runtime bundled inside, so the only thing it needs on your machine is **Node.js 20 or newer**.
 
 Because the bundles are unsigned, macOS quarantines them on first launch. Clear the flag once after moving the app into `/Applications`:
 

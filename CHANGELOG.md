@@ -60,5 +60,5 @@ Initial release: a native Tauri v2 shell around the DeepSeek Harness web GUI.
 - **CI** — GitHub Actions running `cargo fmt`, `clippy`, and `cargo test` on
   every push, with a tag-triggered three-platform release build.
 
-[Unreleased]: https://github.com/AleCyriaco/dsh-desktop/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/AleCyriaco/dsh-desktop/releases/tag/v0.1.0
+[Unreleased]: https://github.com/AleCyriaco/deepseek-harness-desktop/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/AleCyriaco/deepseek-harness-desktop/releases/tag/v0.1.0

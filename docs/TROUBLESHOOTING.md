@@ -50,7 +50,7 @@ DSH_DESKTOP_NODE=/opt/homebrew/bin/node open -a "DeepSeek Harness Desktop"
 If `node -v` works in your terminal but the packaged app still reports this,
 your Node lives somewhere the search does not cover — `DSH_DESKTOP_NODE` is the
 fix, and the install location is worth
-[reporting](https://github.com/AleCyriaco/dsh-desktop/issues) so it can be
+[reporting](https://github.com/AleCyriaco/deepseek-harness-desktop/issues) so it can be
 added.
 
 ### `failed to start the DeepSeek Harness backend: …`
@@ -193,7 +193,7 @@ node backend/node_modules/@deepseek-ai/dsh/lib/bin.js web --no-open --port 0
 
 - **It prints `dsh web: http://127.0.0.1:<port>` and the UI works in a
   browser** → the harness is fine; the problem is in this shell. Please
-  [open an issue](https://github.com/AleCyriaco/dsh-desktop/issues) with your OS,
+  [open an issue](https://github.com/AleCyriaco/deepseek-harness-desktop/issues) with your OS,
   the stderr output, and the steps you took.
 - **It fails, or the UI misbehaves in the browser too** → the problem is
   upstream in the harness, and the shell will reproduce it faithfully because

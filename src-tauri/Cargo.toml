@@ -6,7 +6,7 @@ authors = ["Alexandre Cyriaco"]
 edition = "2021"
 license = "MIT"
 readme = "../README.md"
-repository = "https://github.com/AleCyriaco/dsh-desktop"
+repository = "https://github.com/AleCyriaco/deepseek-harness-desktop"
 keywords = ["tauri", "desktop", "deepseek", "webview"]
 categories = ["gui"]
 
