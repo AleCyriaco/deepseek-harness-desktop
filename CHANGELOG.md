@@ -29,6 +29,13 @@ Nothing yet.
   `@deepseek-ai/cordis-plugin-group`. The install reported success and the
   failure only appeared at runtime, as `ERR_MODULE_NOT_FOUND`. The flag was
   there to make installation faster; it was trading correctness for speed.
+- **`backend/package-lock.json` is now committed and installs go through
+  `npm ci`.** Removing `--legacy-peer-deps` fixed the missing package but left
+  npm resolving the graph from scratch, which exhausted the heap on GitHub's
+  macOS runner. A lockfile sidesteps resolution entirely: 18 seconds instead of
+  minutes, no memory blow-up, and the exact package set that was tested. This
+  also closes a reproducibility gap the documentation had flagged from the
+  start.
 - pnpm is now run with `--node-linker=hoisted`. Its default layout is a farm of
   symlinks into a content store, which the portable packer skips — so a
   developer with pnpm installed would have produced a differently broken

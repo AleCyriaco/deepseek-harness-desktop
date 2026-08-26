@@ -69,9 +69,8 @@ for how to spot and stop an orphan.
   `libc`, pinned by `src-tauri/Cargo.lock`.
 - The harness runtime is installed from npm at build time and is **not** vendored
   into this repository.
-- `backend/package.json` uses a semver range with no lockfile, so
-  `npm run backend:install` picks up the newest matching release. Pin an exact
-  version there if your threat model requires reproducible backend installs.
+- `backend/package-lock.json` is committed and installs go through `npm ci`, so
+  the package set is pinned by digest and every build is reproducible.
 - The `npx --yes @deepseek-ai/dsh@latest` fallback downloads and executes the
   latest published harness. Convenient, but it is a network-fetch-and-run path:
   avoid it in hardened environments by installing the backend explicitly or

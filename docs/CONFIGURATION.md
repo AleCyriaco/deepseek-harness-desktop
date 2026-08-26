@@ -139,7 +139,8 @@ documentation). Two consequences worth knowing:
 | `src-tauri/Cargo.toml` | Rust crate name, version, dependencies, the `staticlib`/`cdylib`/`rlib` crate types Tauri needs. |
 | `src-tauri/capabilities/default.json` | The Tauri permission set granted to the `main` window — currently `core:default` only. |
 | `package.json` | The npm scripts and the Tauri CLI version. |
-| `backend/package.json` | The `@deepseek-ai/dsh` semver range installed by `npm run backend:install`. |
+| `backend/package.json` | The `@deepseek-ai/dsh` semver range. |
+| `backend/package-lock.json` | The exact package set installed by `npm run backend:install`, and the one the releases are built from. |
 
 ### Bundling the backend
 

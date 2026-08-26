@@ -287,7 +287,18 @@ These are gitignored and must never be committed:
 | `app-icon.png` | 62 KB | Regenerate with `node scripts/make-icon.mjs`. |
 | `.DS_Store` | — | macOS noise. |
 
-`backend/` intentionally has no lockfile, so `npm run backend:install` always
-resolves the newest `@deepseek-ai/dsh` matching the semver range in
-`backend/package.json`. Pin the exact version there if you need reproducible
-backend installs.
+`backend/package-lock.json` **is** committed, and `npm run backend:install`
+uses `npm ci` whenever it is present. That is a correctness requirement, not an
+optimisation: resolving this graph from scratch exhausted the heap on GitHub's
+macOS runner, and the usual workaround — `--legacy-peer-deps` — silently drops
+peer dependencies the harness needs, producing a tree that installs cleanly and
+then fails at runtime.
+
+To move to a newer harness, update the range in `backend/package.json`, then
+regenerate the lockfile and prove the result actually runs:
+
+```sh
+cd backend && npm install --package-lock-only && cd ..
+npm run backend:install
+npm run backend:check
+```
