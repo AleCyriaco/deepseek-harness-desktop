@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.1] — 2026-08-26
+
 ### Added
 
 - **Portable Windows build.** `dsh-desktop.exe` is published on its own: a
@@ -26,8 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The readiness budget now depends on the resolved backend: 45 s for a local
   install, 15 minutes when `npx` has to download the harness first. The old
   fixed 45 s aborted that download mid-flight and reported a timeout.
-
-## [0.1.1] — 2026-08-26
 
 ### Fixed
 
