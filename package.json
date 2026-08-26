@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Native cross-platform desktop shell (Rust + Tauri v2) for the DeepSeek Harness web GUI",
   "license": "MIT",
   "author": "Alexandre Cyriaco",

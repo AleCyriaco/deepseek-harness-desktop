@@ -171,6 +171,29 @@ fn extra_bin_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+/// Strip Windows' extended-length (`\\?\`) prefix from a path.
+///
+/// `resource_dir()` hands back a verbatim path on Windows. Every Win32 API
+/// accepts it, so `is_file()` and the rest of our resolution succeed — but
+/// Node does not: given `\\?\C:\...\bin.js` it fails with
+/// `EISDIR: lstat 'C:'` and exits before announcing its URL. Anything handed
+/// to a child process therefore has to be a plain path.
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    let text = path.as_os_str().to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        // `\\?\UNC\server\share` is really `\\server\share`.
+        if let Some(unc) = rest.strip_prefix("UNC\\") {
+            return PathBuf::from(format!(r"\\{unc}"));
+        }
+        // `\\?\C:\...` is really `C:\...`.
+        let bytes = rest.as_bytes();
+        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Look a command up on `PATH`, honouring Windows executable extensions.
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
@@ -473,12 +496,18 @@ pub fn search_roots(app: &tauri::App) -> Vec<PathBuf> {
         roots.push(Path::new(&dir).join(".."));
     }
 
+    // Normalise here rather than at the point of use, so every path derived
+    // from a root is already safe to hand to Node.
     roots
+        .iter()
+        .map(|root| strip_verbatim_prefix(root))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_url, is_js_entry, parse_version};
+    use super::{extract_url, is_js_entry, parse_version, strip_verbatim_prefix};
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn extracts_announced_loopback_url() {
@@ -516,6 +545,32 @@ mod tests {
         let mut names = ["v9.0.0", "v20.11.0", "v18.19.1"];
         names.sort_by_key(|n| std::cmp::Reverse(parse_version(n)));
         assert_eq!(names, ["v20.11.0", "v18.19.1", "v9.0.0"]);
+    }
+
+    #[test]
+    fn strips_the_windows_verbatim_prefix() {
+        // The bug this guards: Node fails with `EISDIR: lstat 'C:'` when it is
+        // handed a `\\?\` path, so a packaged Windows build never started.
+        assert_eq!(
+            strip_verbatim_prefix(Path::new(r"\\?\C:\Users\max\app\bin.js")),
+            PathBuf::from(r"C:\Users\max\app\bin.js")
+        );
+        assert_eq!(
+            strip_verbatim_prefix(Path::new(r"\\?\UNC\server\share\app")),
+            PathBuf::from(r"\\server\share\app")
+        );
+    }
+
+    #[test]
+    fn leaves_ordinary_paths_untouched() {
+        assert_eq!(
+            strip_verbatim_prefix(Path::new("/usr/local/bin/node")),
+            PathBuf::from("/usr/local/bin/node")
+        );
+        assert_eq!(
+            strip_verbatim_prefix(Path::new(r"C:\Program Files\nodejs")),
+            PathBuf::from(r"C:\Program Files\nodejs")
+        );
     }
 
     #[test]

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.1] — 2026-08-26
+
+### Fixed
+
+- **The packaged Windows build could never start.** `resource_dir()` returns a
+  Windows extended-length path (`\\?\C:\...`). Every Win32 API accepts that
+  form, so backend resolution succeeded and the bug was invisible to our own
+  file checks — but Node rejects it, failing with `EISDIR: lstat 'C:'` and
+  exiting before announcing its URL. The window therefore never opened. Paths
+  derived from a search root are now normalised before being handed to a child
+  process. macOS and Linux were unaffected.
+
 ## [0.1.0] — 2026-08-25
 
 Initial release: a native Tauri v2 shell around the DeepSeek Harness web GUI.
@@ -60,5 +72,6 @@ Initial release: a native Tauri v2 shell around the DeepSeek Harness web GUI.
 - **CI** — GitHub Actions running `cargo fmt`, `clippy`, and `cargo test` on
   every push, with a tag-triggered three-platform release build.
 
-[Unreleased]: https://github.com/AleCyriaco/deepseek-harness-desktop/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/AleCyriaco/deepseek-harness-desktop/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/AleCyriaco/deepseek-harness-desktop/releases/tag/v0.1.1
 [0.1.0]: https://github.com/AleCyriaco/deepseek-harness-desktop/releases/tag/v0.1.0
