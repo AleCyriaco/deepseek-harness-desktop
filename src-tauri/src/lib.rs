@@ -6,9 +6,9 @@
 
 mod backend;
 
-use std::sync::Mutex;
+use std::{sync::Mutex, thread};
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use backend::Backend;
 
@@ -31,8 +31,23 @@ impl BackendState {
     }
 }
 
+/// The window shown while the backend starts.
+///
+/// It exists so the app is never a blank screen. A locally installed backend
+/// is ready in a second or two, but the portable build fetches the harness on
+/// first run, which takes minutes — without something on screen that is
+/// indistinguishable from a crash.
+fn create_splash_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
+    WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("index.html".into()))
+        .title("DeepSeek Harness Desktop")
+        .inner_size(560.0, 360.0)
+        .resizable(false)
+        .center()
+        .build()
+}
+
 /// Create the main window, pointed at the harness URL the server announced.
-fn create_main_window(app: &tauri::App, url: &str) -> tauri::Result<()> {
+fn create_main_window(app: &AppHandle, url: &str) -> tauri::Result<WebviewWindow> {
     let target = url
         .parse::<url::Url>()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
@@ -42,9 +57,22 @@ fn create_main_window(app: &tauri::App, url: &str) -> tauri::Result<()> {
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .center()
-        .build()?;
+        .build()
+}
 
-    Ok(())
+/// Render a startup failure inside the splash window.
+///
+/// A GUI app has no console, so `eprintln!` alone means the user sees the
+/// window vanish with no explanation. The message is passed through
+/// `serde_json` so quotes and newlines in a backend error cannot break out of
+/// the JavaScript string.
+fn report_failure(splash: &WebviewWindow, message: &str) {
+    eprintln!("dsh-desktop: {message}");
+    let payload = serde_json::to_string(message)
+        .unwrap_or_else(|_| "\"the backend failed to start\"".to_string());
+    let _ = splash.eval(format!(
+        "window.dshShowError && window.dshShowError({payload})"
+    ));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,22 +81,30 @@ pub fn run() {
         .setup(|app| {
             app.manage(BackendState(Mutex::new(None)));
 
-            let (backend, url) = match backend::spawn_backend(&backend::search_roots(app)) {
-                Ok(ready) => ready,
-                Err(message) => {
-                    eprintln!("dsh-desktop: {message}");
-                    app.handle().exit(1);
-                    return Ok(());
+            let roots = backend::search_roots(app);
+            let splash = create_splash_window(app)?;
+            let handle = app.handle().clone();
+
+            // Starting the backend must not block `setup`: nothing renders
+            // until the setup hook returns, so waiting here would hide the
+            // splash window we just created.
+            thread::spawn(move || match backend::spawn_backend(&roots) {
+                Ok((backend, url)) => {
+                    handle.state::<BackendState>().set(backend);
+                    match create_main_window(&handle, &url) {
+                        Ok(_) => {
+                            let _ = splash.close();
+                        }
+                        Err(e) => {
+                            report_failure(&splash, &format!("could not open the window: {e}"));
+                            handle.state::<BackendState>().shutdown();
+                        }
+                    }
                 }
-            };
-
-            app.state::<BackendState>().set(backend);
-
-            if let Err(e) = create_main_window(app, &url) {
-                eprintln!("dsh-desktop: failed to create the main window: {e}");
-                app.state::<BackendState>().shutdown();
-                app.handle().exit(1);
-            }
+                // The splash window stays open holding the message, so the
+                // user can read it and close the app themselves.
+                Err(message) => report_failure(&splash, &message),
+            });
 
             Ok(())
         })

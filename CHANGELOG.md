@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Portable Windows build.** `dsh-desktop.exe` is published on its own: a
+  single 8 MB executable that needs no installation. With no resources beside
+  it, it falls through to the `npx` bootstrap and fetches the harness on first
+  run.
+- **A window now appears immediately**, before the backend is ready. Startup
+  used to block the Tauri setup hook, so nothing rendered until the server had
+  announced its URL — fine for a local backend, indistinguishable from a crash
+  for a portable first run that downloads 270 MB.
+- **Startup failures are shown in that window** instead of only on stderr. A
+  GUI app has no console, so a failed start previously left the user with no
+  explanation at all. The message is selectable for pasting into a report.
+
+### Changed
+
+- The readiness budget now depends on the resolved backend: 45 s for a local
+  install, 15 minutes when `npx` has to download the harness first. The old
+  fixed 45 s aborted that download mid-flight and reported a timeout.
 
 ## [0.1.1] — 2026-08-26
 

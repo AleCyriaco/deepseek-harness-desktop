@@ -78,11 +78,28 @@ The child process died. Run the backend command by hand to see its error; in a
 debug build (`npm run dev`) the backend's own output is echoed with a
 `[dsh web]` prefix, which usually contains the real message.
 
+## The portable build sits on "Starting DeepSeek Harness…" for minutes
+
+Expected on the **first** run. `dsh-desktop.exe` ships no harness runtime, so it
+fetches one through `npx` — roughly 270 MB — before the server can start. The
+budget for that path is 15 minutes rather than the usual 45 seconds.
+
+It needs a working internet connection. Behind a proxy, configure npm first
+(`npm config set proxy …`), or use the installer, which carries the runtime and
+works offline.
+
+Later launches reuse the npm cache and start in seconds.
+
 ## The window never appears
 
-If nothing is printed and no window opens, the shell is still inside the
-45-second readiness wait. Give it the full timeout — it will either open or
-print a diagnostic. A cold `npx` bootstrap is the usual reason.
+A window should appear almost immediately — the splash, which stays up until
+the harness is ready. If it never appears at all, the app failed before the
+webview could be created; on Linux that is usually a missing or mismatched
+`webkit2gtk`, and on Windows a missing WebView2 runtime.
+
+Startup failures are now rendered **inside that window**, so there is normally
+no need to hunt for stderr: the message names the exact command that was run
+and what it reported.
 
 ## The window is blank or shows the fallback page
 

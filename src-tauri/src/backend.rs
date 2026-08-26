@@ -21,8 +21,16 @@ use std::{
 
 use tauri::Manager;
 
-/// How long to wait for the server to print its URL before giving up.
+/// How long to wait for a locally installed backend to print its URL.
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
+
+/// How long to wait when `npx` has to fetch the harness first.
+///
+/// The portable single-executable build ships no backend, so its first run
+/// downloads roughly 270 MB before the server can print anything. A 45-second
+/// budget would abort that mid-flight and report a timeout that looks
+/// identical to a crash.
+const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// The exact prefix the web app prints when it is listening.
 const URL_PREFIX: &str = "http://127.0.0.1:";
@@ -285,7 +293,7 @@ fn add_web_args(cmd: &mut Command) {
 /// 2. A bundled backend under `<root>/backend/node_modules/@deepseek-ai/dsh`.
 /// 3. `dsh` on `PATH` (or in a well-known install directory).
 /// 4. `npx --yes @deepseek-ai/dsh@latest`.
-fn build_command(search_roots: &[PathBuf]) -> Result<Command, String> {
+fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String> {
     let node = find_node();
 
     if let Some(backend) = non_empty_env("DSH_DESKTOP_BACKEND") {
@@ -298,7 +306,7 @@ fn build_command(search_roots: &[PathBuf]) -> Result<Command, String> {
             command_at(Path::new(&backend))
         };
         add_web_args(&mut cmd);
-        return Ok(cmd);
+        return Ok((cmd, READY_TIMEOUT));
     }
 
     if let Some(node) = node.as_ref() {
@@ -314,7 +322,7 @@ fn build_command(search_roots: &[PathBuf]) -> Result<Command, String> {
                 let mut cmd = command_at(node);
                 cmd.arg(bin);
                 add_web_args(&mut cmd);
-                return Ok(cmd);
+                return Ok((cmd, READY_TIMEOUT));
             }
         }
     }
@@ -322,14 +330,16 @@ fn build_command(search_roots: &[PathBuf]) -> Result<Command, String> {
     if let Some(dsh) = find_tool("dsh") {
         let mut cmd = command_at(&dsh);
         add_web_args(&mut cmd);
-        return Ok(cmd);
+        return Ok((cmd, READY_TIMEOUT));
     }
 
+    // Last resort, and the path the portable build takes: `npx` fetches the
+    // harness before it can serve anything, so it gets the longer budget.
     if let Some(npx) = find_tool("npx") {
         let mut cmd = command_at(&npx);
         cmd.args(["--yes", "@deepseek-ai/dsh@latest"]);
         add_web_args(&mut cmd);
-        return Ok(cmd);
+        return Ok((cmd, BOOTSTRAP_TIMEOUT));
     }
 
     if node.is_none() {
@@ -378,7 +388,7 @@ fn describe(cmd: &Command) -> String {
 
 /// Start the backend and block until it announces its URL.
 pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), String> {
-    let mut cmd = build_command(search_roots)?;
+    let (mut cmd, ready_timeout) = build_command(search_roots)?;
     let description = describe(&cmd);
 
     // Run the server as its own process-group leader so `terminate_group` can
@@ -443,12 +453,12 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
         }
     };
 
-    let url = match rx.recv_timeout(READY_TIMEOUT) {
+    let url = match rx.recv_timeout(ready_timeout) {
         Ok(url) => url,
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let reason = format!(
                 "backend did not become ready within {}s ({description})",
-                READY_TIMEOUT.as_secs()
+                ready_timeout.as_secs()
             );
             return Err(fail(pid, &mut child, reason));
         }

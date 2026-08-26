@@ -104,6 +104,19 @@ Whatever directory the tool is found in is **prepended to the backend's own
 servers) inherit the same Node installation rather than falling back to a
 different one — or to none.
 
+## Startup budgets
+
+How long the shell waits for the backend to announce its URL depends on which
+backend it resolved:
+
+| Backend | Budget | Why |
+|---|---|---|
+| Explicit, bundled, or `dsh` on `PATH` | 45 s | Already installed; it only has to boot. |
+| `npx --yes @deepseek-ai/dsh@latest` | 15 min | First run downloads roughly 270 MB before the server can print anything. |
+
+Neither is configurable. The splash window is shown for the whole wait, so a
+long first run looks like progress rather than a hang.
+
 ## Where harness state lives
 
 The shell writes nothing. Sessions, credentials and settings are stored by the
