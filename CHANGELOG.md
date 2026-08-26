@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.2] — 2026-08-26
+
+### Fixed
+
+- **The portable build could hang forever on first run.** stdout and stderr
+  were drained one after the other, so whichever was read second filled its
+  64 KB pipe buffer and blocked the backend permanently. npm writes its
+  progress to stderr, which made this the normal case rather than an edge
+  case. Each stream now has its own reader thread.
+- **`npx` could not be launched on Windows at all.** It ships as `npx.cmd`,
+  and `CreateProcess` refuses batch files, so spawning it failed outright.
+  Batch scripts now go through `cmd.exe /C`.
+
+### Changed
+
+- **The bootstrap waits on activity, not on a stopwatch.** A fixed 15-minute
+  deadline was wrong in both directions: it killed slow downloads that were
+  still progressing, and left genuinely stuck ones hanging for a quarter of an
+  hour. The bootstrap now fails after 150 seconds of complete silence, with a
+  45-minute absolute ceiling.
+- **npm runs at `--loglevel=http` during the bootstrap.** It is otherwise
+  entirely silent while downloading ~270 MB, which leaves no way to tell a
+  slow connection from a wedged process.
+
+### Added
+
+- **The splash window shows live progress.** Backend output is streamed into
+  it: the DeepSeek whale swims while bubbles rise, one per event actually
+  received — so a stalled download visibly stops bubbling instead of showing a
+  progress bar that keeps animating over nothing. A real count of packages
+  fetched, the current line, and elapsed time are shown alongside.
+
 ## [0.1.1] — 2026-08-26
 
 ### Added

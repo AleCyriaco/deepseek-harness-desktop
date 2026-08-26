@@ -60,6 +60,15 @@ fn create_main_window(app: &AppHandle, url: &str) -> tauri::Result<WebviewWindow
         .build()
 }
 
+/// Stream a line of backend output into the splash window.
+fn report_progress(splash: &WebviewWindow, line: &str) {
+    if let Ok(payload) = serde_json::to_string(line) {
+        let _ = splash.eval(format!(
+            "window.dshProgress && window.dshProgress({payload})"
+        ));
+    }
+}
+
 /// Render a startup failure inside the splash window.
 ///
 /// A GUI app has no console, so `eprintln!` alone means the user sees the
@@ -88,22 +97,25 @@ pub fn run() {
             // Starting the backend must not block `setup`: nothing renders
             // until the setup hook returns, so waiting here would hide the
             // splash window we just created.
-            thread::spawn(move || match backend::spawn_backend(&roots) {
-                Ok((backend, url)) => {
-                    handle.state::<BackendState>().set(backend);
-                    match create_main_window(&handle, &url) {
-                        Ok(_) => {
-                            let _ = splash.close();
-                        }
-                        Err(e) => {
-                            report_failure(&splash, &format!("could not open the window: {e}"));
-                            handle.state::<BackendState>().shutdown();
+            thread::spawn(move || {
+                let progress = splash.clone();
+                match backend::spawn_backend(&roots, move |line| report_progress(&progress, line)) {
+                    Ok((backend, url)) => {
+                        handle.state::<BackendState>().set(backend);
+                        match create_main_window(&handle, &url) {
+                            Ok(_) => {
+                                let _ = splash.close();
+                            }
+                            Err(e) => {
+                                report_failure(&splash, &format!("could not open the window: {e}"));
+                                handle.state::<BackendState>().shutdown();
+                            }
                         }
                     }
+                    // The splash window stays open holding the message, so
+                    // the user can read it and close the app themselves.
+                    Err(message) => report_failure(&splash, &message),
                 }
-                // The splash window stays open holding the message, so the
-                // user can read it and close the app themselves.
-                Err(message) => report_failure(&splash, &message),
             });
 
             Ok(())

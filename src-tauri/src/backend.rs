@@ -11,12 +11,12 @@ use std::{
     env,
     ffi::OsStr,
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tauri::Manager;
@@ -24,13 +24,54 @@ use tauri::Manager;
 /// How long to wait for a locally installed backend to print its URL.
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 
-/// How long to wait when `npx` has to fetch the harness first.
+/// How long the `npx` bootstrap may stay completely silent before we give up.
 ///
-/// The portable single-executable build ships no backend, so its first run
-/// downloads roughly 270 MB before the server can print anything. A 45-second
-/// budget would abort that mid-flight and report a timeout that looks
-/// identical to a crash.
-const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+/// The portable build downloads roughly 270 MB on first run. A fixed overall
+/// deadline is the wrong tool for that: too short and a slow connection is
+/// killed mid-download, too long and a genuinely stuck process hangs for
+/// quarter of an hour. Judging by *silence* instead means a download that is
+/// still making progress is never interrupted, while a wedged one fails fast.
+const BOOTSTRAP_IDLE_TIMEOUT: Duration = Duration::from_secs(150);
+
+/// Absolute ceiling for the bootstrap, however chatty it is.
+const BOOTSTRAP_TOTAL_TIMEOUT: Duration = Duration::from_secs(45 * 60);
+
+/// How long to keep for the error report shown to the user.
+const RECENT_LINES: usize = 40;
+
+/// Minimum gap between progress lines forwarded to the UI.
+///
+/// `npm --loglevel=http` emits a line per request, which can burst into the
+/// hundreds per second; every one of those would otherwise become a separate
+/// webview `eval`.
+const PROGRESS_THROTTLE: Duration = Duration::from_millis(90);
+
+/// How long a backend may take to announce itself, and how long it may stay
+/// silent while doing so.
+#[derive(Clone, Copy)]
+struct Budget {
+    idle: Duration,
+    total: Duration,
+}
+
+impl Budget {
+    /// An already-installed backend: it prints nothing until the URL, so
+    /// silence is the only thing there is to measure.
+    const fn local() -> Self {
+        Self {
+            idle: READY_TIMEOUT,
+            total: READY_TIMEOUT,
+        }
+    }
+
+    /// The `npx` bootstrap, which reports every package it fetches.
+    const fn bootstrap() -> Self {
+        Self {
+            idle: BOOTSTRAP_IDLE_TIMEOUT,
+            total: BOOTSTRAP_TOTAL_TIMEOUT,
+        }
+    }
+}
 
 /// The exact prefix the web app prints when it is listening.
 const URL_PREFIX: &str = "http://127.0.0.1:";
@@ -268,9 +309,30 @@ fn prepend_path(cmd: &mut Command, dir: &Path) {
     }
 }
 
+/// Is this a Windows batch script rather than a real executable?
+///
+/// It matters because `npx` ships as `npx.cmd`: `CreateProcess` refuses batch
+/// files outright, so spawning one directly fails with "not a valid Win32
+/// application". They have to go through `cmd.exe /C`.
+#[cfg(windows)]
+fn is_batch_script(program: &Path) -> bool {
+    program
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+}
+
 /// Build a `Command` for an executable, exposing its own directory to the
 /// child so sibling tools remain reachable.
 fn command_at(program: &Path) -> Command {
+    #[cfg(windows)]
+    let mut cmd = if is_batch_script(program) {
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/C").arg(program);
+        cmd
+    } else {
+        Command::new(program)
+    };
+    #[cfg(not(windows))]
     let mut cmd = Command::new(program);
     if let Some(dir) = program.parent() {
         if !dir.as_os_str().is_empty() {
@@ -293,7 +355,7 @@ fn add_web_args(cmd: &mut Command) {
 /// 2. A bundled backend under `<root>/backend/node_modules/@deepseek-ai/dsh`.
 /// 3. `dsh` on `PATH` (or in a well-known install directory).
 /// 4. `npx --yes @deepseek-ai/dsh@latest`.
-fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String> {
+fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Budget), String> {
     let node = find_node();
 
     if let Some(backend) = non_empty_env("DSH_DESKTOP_BACKEND") {
@@ -306,7 +368,7 @@ fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String
             command_at(Path::new(&backend))
         };
         add_web_args(&mut cmd);
-        return Ok((cmd, READY_TIMEOUT));
+        return Ok((cmd, Budget::local()));
     }
 
     if let Some(node) = node.as_ref() {
@@ -322,7 +384,7 @@ fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String
                 let mut cmd = command_at(node);
                 cmd.arg(bin);
                 add_web_args(&mut cmd);
-                return Ok((cmd, READY_TIMEOUT));
+                return Ok((cmd, Budget::local()));
             }
         }
     }
@@ -330,7 +392,7 @@ fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String
     if let Some(dsh) = find_tool("dsh") {
         let mut cmd = command_at(&dsh);
         add_web_args(&mut cmd);
-        return Ok((cmd, READY_TIMEOUT));
+        return Ok((cmd, Budget::local()));
     }
 
     // Last resort, and the path the portable build takes: `npx` fetches the
@@ -338,8 +400,13 @@ fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Duration), String
     if let Some(npx) = find_tool("npx") {
         let mut cmd = command_at(&npx);
         cmd.args(["--yes", "@deepseek-ai/dsh@latest"]);
+        // Without this npm is entirely silent while it downloads, which leaves
+        // the user staring at a frozen window with no way to tell a slow
+        // connection from a wedged process. At `http` it reports every package
+        // it fetches, which is what the splash window shows.
+        cmd.env("npm_config_loglevel", "http");
         add_web_args(&mut cmd);
-        return Ok((cmd, BOOTSTRAP_TIMEOUT));
+        return Ok((cmd, Budget::bootstrap()));
     }
 
     if node.is_none() {
@@ -386,9 +453,52 @@ fn describe(cmd: &Command) -> String {
     format!("{} {}", cmd.get_program().to_string_lossy(), args.join(" "))
 }
 
+/// One thing the backend told us while starting up.
+enum Event {
+    /// The loopback URL the server announced — startup is done.
+    Url(String),
+    /// A line of output, forwarded to the UI and kept for error reports.
+    Line(String),
+    /// One of the two output streams reached end of file.
+    Closed,
+}
+
+/// Forward a stream's lines into the event channel.
+///
+/// stdout and stderr get a thread each **on purpose**. Draining them in
+/// sequence deadlocks: whichever stream is read second fills its 64 KB pipe
+/// buffer and blocks the child forever. `npm --loglevel=http` writes megabytes
+/// to stderr, so that is not a theoretical risk — it is the normal case.
+fn drain<R: Read + Send + 'static>(stream: R, tx: mpsc::Sender<Event>, scan_for_url: bool) {
+    thread::spawn(move || {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            #[cfg(debug_assertions)]
+            eprintln!("[dsh web] {line}");
+
+            if scan_for_url {
+                if let Some(url) = extract_url(&line) {
+                    let _ = tx.send(Event::Url(url));
+                    continue;
+                }
+            }
+            if tx.send(Event::Line(line)).is_err() {
+                return;
+            }
+        }
+        let _ = tx.send(Event::Closed);
+    });
+}
+
 /// Start the backend and block until it announces its URL.
-pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), String> {
-    let (mut cmd, ready_timeout) = build_command(search_roots)?;
+///
+/// `on_progress` receives the backend's output as it arrives so the caller can
+/// show it. It is throttled, because `npm --loglevel=http` can burst into
+/// hundreds of lines a second.
+pub fn spawn_backend(
+    search_roots: &[PathBuf],
+    on_progress: impl Fn(&str),
+) -> Result<(Backend, String), String> {
+    let (mut cmd, budget) = build_command(search_roots)?;
     let description = describe(&cmd);
 
     // Run the server as its own process-group leader so `terminate_group` can
@@ -406,69 +516,79 @@ pub fn spawn_backend(search_roots: &[PathBuf]) -> Result<(Backend, String), Stri
     })?;
     let pid = child.id();
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
+    let (tx, rx) = mpsc::channel::<Event>();
+    if let Some(stdout) = child.stdout.take() {
+        drain(stdout, tx.clone(), true);
+    }
+    if let Some(stderr) = child.stderr.take() {
+        drain(stderr, tx.clone(), false);
+    }
+    // The loop below ends when every sender is gone, so ours must not linger.
+    drop(tx);
 
-    // Drain both streams on a background thread. The first URL line is
-    // forwarded; everything after keeps being drained so a full pipe can never
-    // stall the server. Recent stderr is kept so a failed start can explain
-    // itself instead of reporting a bare timeout.
-    let (tx, rx) = mpsc::channel::<String>();
-    let (err_tx, err_rx) = mpsc::channel::<String>();
-    thread::spawn(move || {
-        let mut announced = false;
-        if let Some(stdout) = stdout {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
-                if !announced {
-                    if let Some(url) = extract_url(&line) {
-                        announced = true;
-                        let _ = tx.send(url);
-                    }
+    let started = Instant::now();
+    let mut recent: Vec<String> = Vec::new();
+    let mut last_forwarded: Option<Instant> = None;
+    let mut closed = 0usize;
+
+    let outcome = loop {
+        match rx.recv_timeout(budget.idle) {
+            Ok(Event::Url(url)) => break Ok(url),
+            Ok(Event::Line(line)) => {
+                if recent.len() == RECENT_LINES {
+                    recent.remove(0);
                 }
-                #[cfg(debug_assertions)]
-                eprintln!("[dsh web] {line}");
+                // Throttle by time, not by count, so a slow trickle is still
+                // shown promptly while a burst is thinned out.
+                let due = last_forwarded.is_none_or(|at| at.elapsed() >= PROGRESS_THROTTLE);
+                if due {
+                    on_progress(&line);
+                    last_forwarded = Some(Instant::now());
+                }
+                recent.push(line);
+            }
+            Ok(Event::Closed) => {
+                closed += 1;
+                if closed == 2 {
+                    break Err(format!(
+                        "backend exited before announcing its URL ({description})"
+                    ));
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                break Err(format!(
+                    "backend produced no output for {}s and never announced its URL ({description})",
+                    budget.idle.as_secs()
+                ));
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                break Err(format!(
+                    "backend exited before announcing its URL ({description})"
+                ));
             }
         }
-        if let Some(stderr) = stderr {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
-                #[cfg(debug_assertions)]
-                eprintln!("[dsh web] {line}");
-                let _ = err_tx.send(line);
-            }
-        }
-    });
 
-    let fail = |pid: u32, child: &mut Child, reason: String| -> String {
-        terminate_group(pid);
-        let _ = child.kill();
-        let _ = child.wait();
-        let tail: Vec<String> = err_rx.try_iter().collect();
-        if tail.is_empty() {
-            reason
-        } else {
-            let tail = tail[tail.len().saturating_sub(10)..].join("\n  ");
-            format!("{reason}\n  {tail}")
-        }
-    };
-
-    let url = match rx.recv_timeout(ready_timeout) {
-        Ok(url) => url,
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            let reason = format!(
+        if started.elapsed() > budget.total {
+            break Err(format!(
                 "backend did not become ready within {}s ({description})",
-                ready_timeout.as_secs()
-            );
-            return Err(fail(pid, &mut child, reason));
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            let reason = format!("backend exited before announcing its URL ({description})");
-            return Err(fail(pid, &mut child, reason));
+                budget.total.as_secs()
+            ));
         }
     };
 
-    Ok((Backend { child, pid }, url))
+    match outcome {
+        Ok(url) => Ok((Backend { child, pid }, url)),
+        Err(reason) => {
+            terminate_group(pid);
+            let _ = child.kill();
+            let _ = child.wait();
+            if recent.is_empty() {
+                Err(reason)
+            } else {
+                Err(format!("{reason}\n  {}", recent.join("\n  ")))
+            }
+        }
+    }
 }
 
 /// Search roots where a bundled backend may live: the packaged resource dir,
