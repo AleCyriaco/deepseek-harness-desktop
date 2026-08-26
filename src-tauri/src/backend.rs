@@ -36,8 +36,15 @@ const BOOTSTRAP_IDLE_TIMEOUT: Duration = Duration::from_secs(150);
 /// Absolute ceiling for the bootstrap, however chatty it is.
 const BOOTSTRAP_TOTAL_TIMEOUT: Duration = Duration::from_secs(45 * 60);
 
-/// How long to keep for the error report shown to the user.
-const RECENT_LINES: usize = 40;
+/// How many of the backend's first and last output lines to keep for the
+/// error report.
+///
+/// Both ends matter. A Node crash leads with the cause and follows it with
+/// dozens of stack frames, so keeping only the tail throws away the one line
+/// that explains anything; keeping only the head misses errors reported at the
+/// very end of a run.
+const HEAD_LINES: usize = 25;
+const TAIL_LINES: usize = 25;
 
 /// Minimum gap between progress lines forwarded to the UI.
 ///
@@ -271,12 +278,17 @@ fn find_tool(name: &str) -> Option<PathBuf> {
     find_on_path(name).or_else(|| extra_bin_dirs().iter().find_map(|dir| probe_dir(dir, name)))
 }
 
-/// Locate the Node interpreter, honouring `DSH_DESKTOP_NODE`.
-fn find_node() -> Option<PathBuf> {
+/// Locate the Node interpreter.
+///
+/// An explicit `DSH_DESKTOP_NODE` always wins, so a portable build can still
+/// be pointed at a different interpreter. Otherwise the one unpacked from the
+/// binary is preferred over whatever is installed, because it is the version
+/// this release was tested against.
+fn find_node(bundled: Option<&Path>) -> Option<PathBuf> {
     if let Some(explicit) = non_empty_env("DSH_DESKTOP_NODE") {
         return Some(PathBuf::from(explicit));
     }
-    find_tool("node")
+    bundled.map(Path::to_path_buf).or_else(|| find_tool("node"))
 }
 
 /// Read an environment variable, treating blank values as unset.
@@ -355,8 +367,11 @@ fn add_web_args(cmd: &mut Command) {
 /// 2. A bundled backend under `<root>/backend/node_modules/@deepseek-ai/dsh`.
 /// 3. `dsh` on `PATH` (or in a well-known install directory).
 /// 4. `npx --yes @deepseek-ai/dsh@latest`.
-fn build_command(search_roots: &[PathBuf]) -> Result<(Command, Budget), String> {
-    let node = find_node();
+fn build_command(
+    search_roots: &[PathBuf],
+    bundled_node: Option<&Path>,
+) -> Result<(Command, Budget), String> {
+    let node = find_node(bundled_node);
 
     if let Some(backend) = non_empty_env("DSH_DESKTOP_BACKEND") {
         let mut cmd = if is_js_entry(&backend) {
@@ -498,7 +513,23 @@ pub fn spawn_backend(
     search_roots: &[PathBuf],
     on_progress: impl Fn(&str),
 ) -> Result<(Backend, String), String> {
-    let (mut cmd, budget) = build_command(search_roots)?;
+    // The portable build carries its runtime inside the binary. Unpacking it
+    // first means resolution finds a complete Node + harness pair and never
+    // reaches the `npx` bootstrap.
+    #[cfg(feature = "portable")]
+    let (search_roots, bundled_node) = {
+        let runtime = crate::portable::prepare(&on_progress)?;
+        let node = crate::portable::node(&runtime);
+        let mut roots = vec![runtime];
+        roots.extend_from_slice(search_roots);
+        (roots, node)
+    };
+    // Both branches yield an owned Vec so the call below is identical either
+    // way; the copy is a handful of paths at startup.
+    #[cfg(not(feature = "portable"))]
+    let (search_roots, bundled_node) = (search_roots.to_vec(), None::<PathBuf>);
+
+    let (mut cmd, budget) = build_command(&search_roots, bundled_node.as_deref())?;
     let description = describe(&cmd);
 
     // Run the server as its own process-group leader so `terminate_group` can
@@ -527,7 +558,9 @@ pub fn spawn_backend(
     drop(tx);
 
     let started = Instant::now();
-    let mut recent: Vec<String> = Vec::new();
+    let mut head: Vec<String> = Vec::new();
+    let mut tail: Vec<String> = Vec::new();
+    let mut dropped = 0usize;
     let mut last_forwarded: Option<Instant> = None;
     let mut closed = 0usize;
 
@@ -535,9 +568,6 @@ pub fn spawn_backend(
         match rx.recv_timeout(budget.idle) {
             Ok(Event::Url(url)) => break Ok(url),
             Ok(Event::Line(line)) => {
-                if recent.len() == RECENT_LINES {
-                    recent.remove(0);
-                }
                 // Throttle by time, not by count, so a slow trickle is still
                 // shown promptly while a burst is thinned out.
                 let due = last_forwarded.is_none_or(|at| at.elapsed() >= PROGRESS_THROTTLE);
@@ -545,7 +575,16 @@ pub fn spawn_backend(
                     on_progress(&line);
                     last_forwarded = Some(Instant::now());
                 }
-                recent.push(line);
+
+                if head.len() < HEAD_LINES {
+                    head.push(line);
+                } else {
+                    if tail.len() == TAIL_LINES {
+                        tail.remove(0);
+                        dropped += 1;
+                    }
+                    tail.push(line);
+                }
             }
             Ok(Event::Closed) => {
                 closed += 1;
@@ -582,10 +621,15 @@ pub fn spawn_backend(
             terminate_group(pid);
             let _ = child.kill();
             let _ = child.wait();
-            if recent.is_empty() {
+            let mut report = head;
+            if dropped > 0 {
+                report.push(format!("… {dropped} more lines …"));
+            }
+            report.extend(tail);
+            if report.is_empty() {
                 Err(reason)
             } else {
-                Err(format!("{reason}\n  {}", recent.join("\n  ")))
+                Err(format!("{reason}\n  {}", report.join("\n  ")))
             }
         }
     }

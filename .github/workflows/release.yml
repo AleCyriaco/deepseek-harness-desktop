@@ -22,6 +22,12 @@ on:
 permissions:
   contents: write
 
+env:
+  # The Node version embedded in the portable build. Pinned deliberately: it
+  # is the interpreter every portable user will run the harness under, so it
+  # should change only as a considered decision.
+  EMBEDDED_NODE: v22.22.0
+
 jobs:
   build:
     name: Build (${{ matrix.label }})
@@ -114,9 +120,24 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      # `dsh-desktop.exe` is picked up alongside the installers: with no
-      # resources next to it, that same binary is the portable build — it
-      # falls through to the `npx` bootstrap and fetches the harness itself.
+      # The portable build carries the harness runtime *and* a Node
+      # interpreter inside the executable, so the machine it runs on needs
+      # nothing at all. That is what the `portable` feature packs in, and why
+      # the Node binary has to be fetched before the build.
+      - name: Fetch the Node runtime to embed
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri/vendor | Out-Null
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/${{ env.EMBEDDED_NODE }}/win-x64/node.exe" `
+            -OutFile "src-tauri/vendor/node.exe"
+          "embedded Node: $((Get-Item src-tauri/vendor/node.exe).Length / 1MB) MB"
+
+      - name: Build the portable executable
+        if: matrix.os == 'windows-latest'
+        working-directory: src-tauri
+        run: cargo build --release --features portable --target-dir target/portable
+
       - name: Upload the bundles as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -124,7 +145,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            src-tauri/target/release/dsh-desktop.exe
+            src-tauri/target/portable/release/dsh-desktop.exe
             src-tauri/target/**/release/bundle/dmg/*.dmg
             src-tauri/target/**/release/bundle/msi/*.msi
             src-tauri/target/**/release/bundle/nsis/*.exe

@@ -81,8 +81,11 @@ The harness is a Node program, so the shell has to find a `node` binary before
 it can start anything. It looks in this order:
 
 1. `DSH_DESKTOP_NODE`, if set.
-2. Every directory on `PATH`.
-3. The well-known install locations below.
+2. The Node interpreter unpacked from the executable — **portable build only**.
+   It wins over an installed Node because it is the version the release was
+   tested against.
+3. Every directory on `PATH`.
+4. The well-known install locations below.
 
 | Platform | Directories |
 |---|---|

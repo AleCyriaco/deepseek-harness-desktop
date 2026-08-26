@@ -78,17 +78,19 @@ The child process died. Run the backend command by hand to see its error; in a
 debug build (`npm run dev`) the backend's own output is echoed with a
 `[dsh web]` prefix, which usually contains the real message.
 
-## The portable build sits on "Starting DeepSeek Harness…" for minutes
+## The portable build takes a while on first run
 
-Expected on the **first** run. `dsh-desktop.exe` ships no harness runtime, so it
-fetches one through `npx` — roughly 270 MB — before the server can start. The
-budget for that path is 15 minutes rather than the usual 45 seconds.
+Expected, and it happens once. `dsh-desktop.exe` carries its runtime compressed
+inside itself and unpacks roughly 310 MB into
+`%LOCALAPPDATA%\DeepSeek Harness Desktop\runtime-<version>\` the first time it
+runs. The splash window reports the file count as it goes. Later launches skip
+straight past it.
 
-It needs a working internet connection. Behind a proxy, configure npm first
-(`npm config set proxy …`), or use the installer, which carries the runtime and
-works offline.
-
-Later launches reuse the npm cache and start in seconds.
+If unpacking fails, the message names the path it could not write. The usual
+causes are a full disk or antivirus software holding files open. Deleting that
+directory forces a clean unpack on the next run — an interrupted unpack is
+detected and redone rather than half-used, so a partial one is never the
+problem.
 
 ## The window never appears
 
@@ -117,9 +119,9 @@ runtime.
 
 ## A server keeps running after closing the app
 
-Closing the window should terminate the whole process group. It will not if the
-app was killed with `SIGKILL` (`kill -9`, Force Quit) — no handler can run in
-that case.
+Closing the window terminates the whole process group. Killing the app with a
+signal does not: neither `kill` (`SIGTERM`) nor `kill -9` (`SIGKILL`, Force
+Quit) runs the shutdown handler, so the server is left behind.
 
 Find and stop the survivor:
 

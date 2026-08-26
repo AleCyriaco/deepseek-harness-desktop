@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.3] — 2026-08-26
+
+### Changed
+
+- **The portable build is now genuinely self-contained.** It carries the
+  harness runtime *and* a pinned Node interpreter compressed inside the
+  executable, and unpacks them once into a per-user cache directory. It no
+  longer downloads anything, no longer needs `npx`, and no longer needs Node
+  installed at all — the previous portable build required all three, and the
+  download was where it failed. The executable is ~87 MB as a result.
+- The embedded interpreter is preferred over an installed one, so every
+  portable user runs the harness under the version the release was tested
+  against.
+
+### Fixed
+
+- Both ends of the backend's output are kept for error reports. Only the last
+  40 lines were kept, and a Node crash leads with the cause and follows it with
+  dozens of stack frames — so the one line that explained anything was always
+  the line thrown away.
+
+### Documentation
+
+- Corrected the claim that only `SIGKILL` orphans the backend: `SIGTERM` does
+  too, because neither runs the shutdown handler. Closing the window, the
+  normal path, tears everything down correctly.
+
 ## [0.1.2] — 2026-08-26
 
 ### Fixed

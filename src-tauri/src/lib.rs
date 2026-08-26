@@ -5,6 +5,8 @@
 //! hosts it in a platform webview. No harness logic is reimplemented here.
 
 mod backend;
+#[cfg(feature = "portable")]
+mod portable;
 
 use std::{sync::Mutex, thread};
 

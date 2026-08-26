@@ -278,7 +278,7 @@ as a last-resort bootstrap that works on a machine with nothing but Node.
 | Backend spawns but never prints a URL | `recv_timeout` times out after 45 s; group killed; the resolved command and the last stderr lines are included in the error; exit `1`. |
 | Backend exits early (bad args, crash) | The channel disconnects when the reader thread ends; group killed; stderr tail reported; exit `1`. |
 | Announced URL is unparseable | `create_main_window` returns `Err`; backend shut down; exit `1`. |
-| App killed with `SIGKILL` | Neither `RunEvent::Exit` nor `Drop` runs — the server is orphaned. This is unavoidable; `SIGKILL` cannot be handled. |
+| App killed with a signal (`SIGTERM`, `SIGKILL`) | Neither `RunEvent::Exit` nor `Drop` runs, so the server is orphaned. `SIGKILL` cannot be handled at all; `SIGTERM` could be, but is not today. Closing the window — the normal path — tears everything down correctly. |
 
 All diagnostics are printed to stderr with a `dsh-desktop:` prefix.
 

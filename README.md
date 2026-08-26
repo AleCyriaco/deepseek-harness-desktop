@@ -17,21 +17,21 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 
 ## Download
 
-Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). All of them need **Node.js 20 or newer** on the machine, and nothing else.
+Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). The installers and the macOS build need **Node.js 20 or newer** on the machine; the portable Windows build needs nothing at all.
 
 | Build | What you get |
 |---|---|
 | macOS `.dmg` | Universal binary (Apple Silicon + Intel), harness runtime bundled inside. |
 | Windows `-setup.exe` / `.msi` | Installer, harness runtime bundled inside — works offline. |
-| Windows `dsh-desktop.exe` | **Portable**: a single 8 MB executable, no installation. |
+| Windows `dsh-desktop.exe` | **Portable**: one self-contained executable, no installation, nothing else required. |
 
 ### The portable build
 
-`dsh-desktop.exe` on its own is the whole app. Copy it anywhere — a USB stick, a network share — and run it. Nothing is installed and nothing is written to the registry.
+`dsh-desktop.exe` is the whole app. Copy it anywhere — a USB stick, a network share — and run it. Nothing is installed, nothing is written to the registry, and **it does not need Node.js**: both the harness runtime and a pinned Node interpreter are compressed inside the executable.
 
-The trade-off is where the harness comes from. The installers carry their own copy (~270 MB); the portable executable does not, so on **first run it downloads the harness** through `npx`, which needs an internet connection and takes a few minutes. A window appears immediately explaining what is happening, and later launches start in seconds from the npm cache.
+That is what makes it ~87 MB. On first run it unpacks its runtime (~310 MB) into `%LOCALAPPDATA%\DeepSeek Harness Desktop\runtime-<version>\`, which takes a few seconds; every later launch starts straight from it. No network access is involved at any point.
 
-If you want it to start instantly and work offline, use the installer instead.
+So "portable" means one file to carry and no installation — not that it leaves the machine untouched. To remove it completely, delete the executable and that cache directory.
 
 Because the bundles are unsigned, macOS quarantines them on first launch. Clear the flag once after moving the app into `/Applications`:
 

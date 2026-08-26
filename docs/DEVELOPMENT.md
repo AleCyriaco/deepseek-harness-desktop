@@ -201,6 +201,27 @@ To build a slim app that resolves `dsh` on the target machine instead, remove
 the `bundle.resources` entry from `src-tauri/tauri.conf.json` — see
 [Shipping a self-contained app](../README.md#shipping-a-self-contained-app).
 
+### The portable build
+
+The portable executable carries the harness runtime and a Node interpreter
+inside itself, packed by `build.rs` behind the `portable` cargo feature:
+
+```sh
+npm run backend:install                      # the runtime to embed
+curl -o src-tauri/vendor/node.exe \
+  https://nodejs.org/dist/v22.22.0/win-x64/node.exe   # the interpreter
+cd src-tauri
+cargo build --release --features portable --target-dir target/portable
+```
+
+`src-tauri/vendor/` is gitignored; CI downloads the interpreter itself, pinned
+by `EMBEDDED_NODE` in the release workflow. Use a **self-contained** Node
+binary — a package manager's dynamically linked one (Homebrew's is ~49 KB) will
+not work away from its libraries.
+
+The feature is off by default because it makes the binary ~87 MB and adds a
+minute and a half to the build.
+
 ### Code signing
 
 Unsigned builds are fine for local use but will be blocked by Gatekeeper on
