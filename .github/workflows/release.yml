@@ -93,6 +93,12 @@ jobs:
       - name: Install the bundled harness runtime
         run: npm run backend:install
 
+      # A tree can install cleanly and still be unusable: v0.1.3 shipped
+      # without a peer dependency and only failed on a user's machine. Start
+      # the backend here, before it is packed into anything.
+      - name: Check the harness runtime actually starts
+        run: npm run backend:check
+
       # On a manual run `tagName` is empty, which tells tauri-action to build
       # without creating or touching any release — the guard that keeps a
       # published release safe from an ad-hoc rebuild.

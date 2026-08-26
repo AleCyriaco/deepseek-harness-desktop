@@ -3,9 +3,18 @@
 //
 // Run from the repository root:  npm run backend:install
 //
-// Prefers pnpm (much faster on this package's large peer-dependency graph),
-// then bun, then npm. npm is run with `--legacy-peer-deps` to avoid the very
-// slow ideal-tree resolution the harness's peer dependencies can trigger.
+// Prefers pnpm, then bun, then npm.
+//
+// Two things here are correctness requirements, not preferences:
+//
+//   * npm must NOT be given `--legacy-peer-deps`. The harness declares real
+//     peer dependencies — `@deepseek-ai/dsh-app-boot` needs
+//     `@deepseek-ai/cordis-plugin-group` — and that flag skips them, producing
+//     a tree that installs cleanly and then dies at runtime with
+//     ERR_MODULE_NOT_FOUND. Slower is fine; wrong is not.
+//   * pnpm must use the hoisted linker. Its default layout is a farm of
+//     symlinks into a content store, which the portable build's packer cannot
+//     follow.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -22,13 +31,13 @@ let command;
 let args;
 if (has("pnpm")) {
   command = "pnpm";
-  args = ["install", "--no-frozen-lockfile"];
+  args = ["install", "--no-frozen-lockfile", "--node-linker=hoisted"];
 } else if (has("bun")) {
   command = "bun";
   args = ["install"];
 } else {
   command = "npm";
-  args = ["install", "--no-audit", "--no-fund", "--legacy-peer-deps"];
+  args = ["install", "--no-audit", "--no-fund"];
 }
 
 console.log(`[dsh-desktop] installing backend runtime with ${command} in ${backend}`);

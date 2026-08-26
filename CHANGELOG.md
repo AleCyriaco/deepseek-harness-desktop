@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.4] — 2026-08-26
+
+### Fixed
+
+- **The portable build shipped an incomplete harness.** `npm` was invoked with
+  `--legacy-peer-deps`, which skips peer dependencies — and the harness has
+  real ones, so `@deepseek-ai/dsh-app-boot` was packed without
+  `@deepseek-ai/cordis-plugin-group`. The install reported success and the
+  failure only appeared at runtime, as `ERR_MODULE_NOT_FOUND`. The flag was
+  there to make installation faster; it was trading correctness for speed.
+- pnpm is now run with `--node-linker=hoisted`. Its default layout is a farm of
+  symlinks into a content store, which the portable packer skips — so a
+  developer with pnpm installed would have produced a differently broken
+  payload.
+
+### Added
+
+- `npm run backend:check` starts the installed runtime and waits for it to
+  announce its URL. CI runs it before anything is packaged, because a tree that
+  installs cleanly can still be unusable — which is exactly how the bug above
+  reached a release.
+
 ## [0.1.3] — 2026-08-26
 
 ### Changed

@@ -78,6 +78,7 @@ To run an already-built debug binary without going through the CLI:
 |---|---|
 | `npm run setup` | `npm install` + `npm run backend:install`. |
 | `npm run backend:install` | Installs `@deepseek-ai/dsh` into `backend/node_modules` (pnpm → bun → npm). |
+| `npm run backend:check` | Starts the installed runtime and waits for its URL. Run after installing. |
 | `npm run dev` | `tauri dev` — debug build, opens the window. |
 | `npm run build -- --target universal-apple-darwin` | Universal macOS bundle. |
 | `npm run build` | `tauri build` — release build and platform bundles. |
