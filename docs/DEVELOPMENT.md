@@ -229,6 +229,30 @@ repository.
    Windows and Linux from a matrix and attaches the bundles to a **draft**
    GitHub Release. Review the draft, then publish it.
 
+### Building one platform without touching a release
+
+Run the same workflow manually and it builds only — no release is created or
+modified, and the bundles come back as workflow artifacts. This is how you get
+a Windows installer or a Linux package for an already-published tag without
+risking the release that is already live:
+
+```sh
+gh workflow run release.yml --ref main
+gh run watch <run-id>
+gh run download <run-id> --name bundles-windows-x86_64
+```
+
+Artifact names are `bundles-macos-universal`, `bundles-windows-x86_64` and
+`bundles-linux-x86_64`; they are kept for 14 days. Attach one to a release
+with:
+
+```sh
+gh release upload v0.1.0 <file>
+```
+
+The guard is `tagName`: it is set only when the run came from a `v*` tag push,
+and an empty `tagName` tells `tauri-action` to build without publishing.
+
 ## Repository hygiene
 
 These are gitignored and must never be committed:

@@ -1,8 +1,15 @@
 name: Release
 
-# Builds the desktop bundles for macOS, Windows and Linux and attaches them to
-# a draft GitHub Release. Push a `v*` tag to trigger it, then review and
-# publish the draft by hand.
+# Builds the desktop bundles for macOS, Windows and Linux.
+#
+# Two modes, decided by how the run was started:
+#
+#   Tag push (`v*`)     build and attach the bundles to a DRAFT GitHub
+#                       Release, which you then review and publish by hand.
+#   Manual dispatch     build only. The bundles are uploaded as workflow
+#                       artifacts and NO release is created or modified, so
+#                       this is safe to run against an already-published tag
+#                       when you just need one platform's installer.
 #
 # Bundles produced here are UNSIGNED unless signing secrets are configured;
 # see docs/DEVELOPMENT.md#code-signing.
@@ -25,14 +32,17 @@ jobs:
         include:
           - os: macos-latest
             label: macOS (universal)
+            slug: macos-universal
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: ubuntu-latest
             label: Linux
+            slug: linux-x86_64
             args: ''
             rust-targets: ''
           - os: windows-latest
             label: Windows
+            slug: windows-x86_64
             args: ''
             rust-targets: ''
     steps:
@@ -77,13 +87,16 @@ jobs:
       - name: Install the bundled harness runtime
         run: npm run backend:install
 
-      - name: Build and draft the release
+      # On a manual run `tagName` is empty, which tells tauri-action to build
+      # without creating or touching any release — the guard that keeps a
+      # published release safe from an ad-hoc rebuild.
+      - name: Build the bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: DeepSeek Harness Desktop ${{ github.ref_name }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('DeepSeek Harness Desktop {0}', github.ref_name) || '' }}
           releaseBody: |
             See [CHANGELOG.md](https://github.com/AleCyriaco/deepseek-harness-desktop/blob/main/CHANGELOG.md) for what changed.
 
@@ -100,3 +113,17 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Upload the bundles as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.slug }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/msi/*.msi
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/deb/*.deb
+            src-tauri/target/**/release/bundle/rpm/*.rpm
+            src-tauri/target/**/release/bundle/appimage/*.AppImage

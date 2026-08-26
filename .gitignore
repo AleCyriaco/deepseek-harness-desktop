@@ -25,3 +25,11 @@ app-icon.png
 *.njsproj
 *.sln
 *.sw?
+
+# Built bundles and binaries (produced by `npm run build`)
+*.dmg
+*.msi
+*.exe
+*.AppImage
+*.deb
+*.rpm

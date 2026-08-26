@@ -117,7 +117,9 @@ The first `npm run dev` compiles the full Tauri dependency tree and takes severa
 npm run build
 ```
 
-`tauri build` produces the platform package for the OS you are building on. **Multi-platform means building once per OS** — Tauri and Rust do not cross-compile the GUI bundles. The included GitHub Actions [release workflow](.github/workflows/release.yml) builds macOS, Windows and Linux from a matrix and attaches the artifacts to a GitHub Release.
+`tauri build` produces the platform package for the OS you are building on. **Multi-platform means building once per OS** — Tauri and Rust do not cross-compile the GUI bundles, so a Windows installer cannot be produced from a Mac.
+
+The GitHub Actions [release workflow](.github/workflows/release.yml) covers that: it builds macOS, Windows and Linux from a matrix. A `v*` tag push attaches the bundles to a draft GitHub Release; a manual run builds only and returns them as workflow artifacts, leaving any published release untouched. See [Building one platform without touching a release](docs/DEVELOPMENT.md#building-one-platform-without-touching-a-release).
 
 ## Shipping a self-contained app
 
