@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.6] — 2026-08-26
+
+### Fixed
+
+- **A console window appeared beside the app on Windows.** `node.exe` is a
+  console application, and when a GUI process starts one the OS allocates a
+  console window for it — a black box sitting next to the app for the whole
+  session. Every process the shell starts is a background worker nobody should
+  see, so they are all created with `CREATE_NO_WINDOW`. The same applied to
+  `taskkill` on shutdown and to `cmd.exe` when opening the log, both of which
+  flashed a window.
+
 ## [0.1.5] — 2026-08-26
 
 ### Fixed

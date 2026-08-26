@@ -262,6 +262,18 @@ Shipping a Node runtime inside the bundle would sidestep all of this, at the
 cost of doubling the download and pinning every user to one version. Finding
 the user's own Node is the better trade.
 
+### `CREATE_NO_WINDOW` on Windows
+
+Every process the shell spawns is created with `CREATE_NO_WINDOW`. Without it,
+a GUI application that starts a console program — and `node.exe` is one — has a
+console window allocated for it by the OS. It appears beside the app window and
+stays for the whole session. The same flag is applied to `taskkill` during
+teardown and to `cmd.exe` when opening the log, which would otherwise flash a
+window each time.
+
+It does not affect the pipes: stdout and stderr are inherited handles,
+independent of whether the child owns a console.
+
 ### Four backend resolution paths
 
 Each path serves a distinct scenario: `DSH_DESKTOP_BACKEND` for developing

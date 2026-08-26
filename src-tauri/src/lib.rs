@@ -48,7 +48,18 @@ fn open_externally(path: &std::path::Path) {
     } else {
         std::process::Command::new("xdg-open")
     };
-    let _ = command.arg(path).spawn();
+    command.arg(path);
+
+    // Same reason as the backend: `cmd.exe` is a console program, and letting
+    // it allocate a window would flash a black box every time someone opens
+    // the log.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+
+    let _ = command.spawn();
 }
 
 /// A menu offering the two things needed to diagnose a problem: the log, and

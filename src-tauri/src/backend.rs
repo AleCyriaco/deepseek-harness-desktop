@@ -83,6 +83,15 @@ impl Budget {
 /// The exact prefix the web app prints when it is listening.
 const URL_PREFIX: &str = "http://127.0.0.1:";
 
+/// Windows process creation flag: run the child without giving it a console.
+///
+/// `node.exe` is a console application. A GUI process that spawns one gets a
+/// console window allocated for it by the OS — a black box that pops up beside
+/// the app window and stays for the whole session. Every process this shell
+/// starts is a background worker the user should never see.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Executable extensions to try when looking a command up by name.
 #[cfg(windows)]
 const EXE_EXTS: &[&str] = &[".exe", ".cmd", ".bat", ""];
@@ -346,6 +355,13 @@ fn command_at(program: &Path) -> Command {
     };
     #[cfg(not(windows))]
     let mut cmd = Command::new(program);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     if let Some(dir) = program.parent() {
         if !dir.as_os_str().is_empty() {
             prepend_path(&mut cmd, dir);
@@ -453,8 +469,12 @@ fn terminate_group(pid: u32) {
 
 #[cfg(windows)]
 fn terminate_group(pid: u32) {
+    use std::os::windows::process::CommandExt;
     let _ = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
+        // taskkill is a console program too: without this it flashes a window
+        // on the way out.
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
 }
 
