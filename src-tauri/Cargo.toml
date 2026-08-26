@@ -1,6 +1,6 @@
 [package]
 name = "dsh-desktop"
-version = "0.1.4"
+version = "0.1.5"
 description = "DeepSeek Harness desktop shell: a Tauri + Rust window around the dsh web GUI"
 authors = ["Alexandre Cyriaco"]
 edition = "2021"
@@ -30,7 +30,10 @@ tauri-build = { version = "2", features = [] }
 flate2 = "1"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `devtools` is enabled in release too: this window hosts a web UI, and
+# without the inspector a client-side failure like "Failed to fetch" cannot be
+# diagnosed at all from a shipped build.
+tauri = { version = "2", features = ["devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"

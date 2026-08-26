@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.5] — 2026-08-26
+
+### Fixed
+
+- **The backend could block mid-session.** Splitting the output readers into
+  two threads in 0.1.2 left them returning as soon as the startup channel
+  closed — so after the window opened, nothing drained the backend's pipes. The
+  next 64 KB it wrote blocked it permanently, long after everything looked
+  healthy. The readers now run to EOF regardless, which is what the two-thread
+  split was for in the first place.
+
+### Added
+
+- **A log file, written on every run**, holding everything the shell and the
+  harness print. A GUI app has no console, so this was previously invisible
+  unless the app was relaunched from a terminal — an awkward thing to ask, and
+  one that changes the conditions of the run.
+- **A Troubleshooting menu**: *Open Log File*, *Show Log Folder*, *Developer
+  Tools* and *Reload*. The inspector is enabled in release builds too, because
+  a failure inside the page — anything reporting `Failed to fetch` — never
+  reaches the backend and cannot be diagnosed from the log.
+
 ## [0.1.4] — 2026-08-26
 
 ### Fixed

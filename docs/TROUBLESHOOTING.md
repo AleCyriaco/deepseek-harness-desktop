@@ -16,10 +16,30 @@ issue, not a shell issue — the fastest way to tell the two apart is the
 - [macOS: the app is blocked or damaged](#macos-the-app-is-blocked-or-damaged)
 - [Is it the shell or the harness?](#is-it-the-shell-or-the-harness)
 
+## Where to look first
+
+Everything the shell and the backend print goes to a log file, written fresh on
+every run. Open it from the window's **Troubleshooting → Open Log File** menu;
+no terminal is involved.
+
+| Platform | Log |
+|---|---|
+| Windows | `%LOCALAPPDATA%\com.deepseek.dshdesktop\logs\dsh-desktop.log` |
+| macOS | `~/Library/Logs/com.deepseek.dshdesktop/dsh-desktop.log` |
+| Linux | `~/.local/share/com.deepseek.dshdesktop/logs/dsh-desktop.log` |
+
+Shell messages are prefixed `dsh-desktop:`; everything from the harness is
+prefixed `[dsh web]`.
+
+For anything that goes wrong **inside the page** — a button that does nothing,
+an error mentioning `fetch` — the log will not show it, because the failure
+never reached the backend. Use **Troubleshooting → Developer Tools** and check
+the Console and Network tabs.
+
 ## The app exits immediately
 
-Run the app from a terminal so you can see stderr — every diagnostic is
-prefixed with `dsh-desktop:`.
+Startup failures are shown in the window itself. The log has the same message
+plus the backend's full output.
 
 ### `no DeepSeek Harness backend found`
 

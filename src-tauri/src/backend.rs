@@ -478,18 +478,27 @@ enum Event {
     Closed,
 }
 
-/// Forward a stream's lines into the event channel.
+/// Forward a stream's lines to the log, and to the event channel while
+/// startup is still waiting on it.
 ///
-/// stdout and stderr get a thread each **on purpose**. Draining them in
-/// sequence deadlocks: whichever stream is read second fills its 64 KB pipe
-/// buffer and blocks the child forever. `npm --loglevel=http` writes megabytes
-/// to stderr, so that is not a theoretical risk — it is the normal case.
+/// Two things here are load-bearing:
+///
+/// * stdout and stderr get a thread each. Draining them in sequence
+///   deadlocks — whichever is read second fills its 64 KB pipe buffer and
+///   blocks the child forever.
+/// * the loop runs to EOF and **never returns early**. Once startup finishes
+///   nobody is listening on the channel any more, and stopping there would
+///   leave the pipes unread: the backend would block on its next 64 KB of
+///   output, mid-session, long after everything looked healthy.
 fn drain<R: Read + Send + 'static>(stream: R, tx: mpsc::Sender<Event>, scan_for_url: bool) {
     thread::spawn(move || {
+        let mut listening = true;
         for line in BufReader::new(stream).lines().map_while(Result::ok) {
-            #[cfg(debug_assertions)]
-            eprintln!("[dsh web] {line}");
+            crate::logging::line(&format!("[dsh web] {line}"));
 
+            if !listening {
+                continue;
+            }
             if scan_for_url {
                 if let Some(url) = extract_url(&line) {
                     let _ = tx.send(Event::Url(url));
@@ -497,7 +506,7 @@ fn drain<R: Read + Send + 'static>(stream: R, tx: mpsc::Sender<Event>, scan_for_
                 }
             }
             if tx.send(Event::Line(line)).is_err() {
-                return;
+                listening = false;
             }
         }
         let _ = tx.send(Event::Closed);

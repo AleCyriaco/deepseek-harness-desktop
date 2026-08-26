@@ -54,6 +54,7 @@ xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
 - [Configuration](#configuration)
 - [Project layout](#project-layout)
 - [Documentation](#documentation)
+- [When something goes wrong](#when-something-goes-wrong)
 - [Design notes](#design-notes)
 - [Contributing](#contributing)
 - [License](#license)
@@ -243,6 +244,15 @@ docs/                      architecture, development, configuration, troubleshoo
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to propose changes, coding conventions, commit and PR expectations. |
 | [SECURITY.md](SECURITY.md) | Security model, the CSP decision, how to report a vulnerability. |
 | [CHANGELOG.md](CHANGELOG.md) | Release history. |
+
+## When something goes wrong
+
+The window has a **Troubleshooting** menu with the two things that matter:
+
+- **Open Log File** — everything the shell and the harness printed this run. Written on every launch, no terminal required.
+- **Developer Tools** — the webview inspector, for failures inside the page that never reach the backend.
+
+Startup failures are shown in the window itself, with the exact command that was run and what it reported.
 
 ## Design notes
 

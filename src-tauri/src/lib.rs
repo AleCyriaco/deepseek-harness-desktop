@@ -5,12 +5,16 @@
 //! hosts it in a platform webview. No harness logic is reimplemented here.
 
 mod backend;
+mod logging;
 #[cfg(feature = "portable")]
 mod portable;
 
 use std::{sync::Mutex, thread};
 
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    menu::{Menu, MenuItem, Submenu},
+    AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 use backend::Backend;
 
@@ -31,6 +35,76 @@ impl BackendState {
             }
         }
     }
+}
+
+/// Open a path with whatever the desktop uses for it.
+fn open_externally(path: &std::path::Path) {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    let _ = command.arg(path).spawn();
+}
+
+/// A menu offering the two things needed to diagnose a problem: the log, and
+/// the inspector.
+///
+/// Neither should require relaunching the app from a terminal. Asking a user
+/// to do that is both awkward and misleading — it changes the conditions of
+/// the run, and it hides the information until someone knows the trick.
+fn build_menu(app: &tauri::App) -> tauri::Result<()> {
+    let logs = MenuItem::with_id(app, "open-log", "Open Log File", true, None::<&str>)?;
+    let folder = MenuItem::with_id(app, "open-log-dir", "Show Log Folder", true, None::<&str>)?;
+    let inspector = MenuItem::with_id(
+        app,
+        "devtools",
+        "Developer Tools",
+        true,
+        Some("CmdOrCtrl+Shift+I"),
+    )?;
+    let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
+
+    let submenu = Submenu::with_items(
+        app,
+        "Troubleshooting",
+        true,
+        &[&reload, &inspector, &logs, &folder],
+    )?;
+
+    let menu = Menu::default(app.handle())?;
+    menu.append(&submenu)?;
+    app.set_menu(menu)?;
+
+    app.on_menu_event(move |app, event| match event.id().as_ref() {
+        "open-log" => {
+            if let Some(path) = logging::path() {
+                open_externally(path);
+            }
+        }
+        "open-log-dir" => {
+            if let Some(dir) = logging::path().and_then(|p| p.parent()) {
+                open_externally(dir);
+            }
+        }
+        "devtools" => {
+            if let Some(window) = app.get_webview_window("main") {
+                window.open_devtools();
+            }
+        }
+        "reload" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval("window.location.reload()");
+            }
+        }
+        _ => {}
+    });
+
+    Ok(())
 }
 
 /// The window shown while the backend starts.
@@ -78,7 +152,7 @@ fn report_progress(splash: &WebviewWindow, line: &str) {
 /// `serde_json` so quotes and newlines in a backend error cannot break out of
 /// the JavaScript string.
 fn report_failure(splash: &WebviewWindow, message: &str) {
-    eprintln!("dsh-desktop: {message}");
+    logging::line(&format!("dsh-desktop: {message}"));
     let payload = serde_json::to_string(message)
         .unwrap_or_else(|_| "\"the backend failed to start\"".to_string());
     let _ = splash.eval(format!(
@@ -91,6 +165,21 @@ pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             app.manage(BackendState(Mutex::new(None)));
+
+            let log = app
+                .path()
+                .app_log_dir()
+                .unwrap_or_else(|_| std::env::temp_dir())
+                .join("dsh-desktop.log");
+            logging::init(log);
+            logging::line(&format!(
+                "dsh-desktop {} starting",
+                env!("CARGO_PKG_VERSION")
+            ));
+
+            if let Err(e) = build_menu(app) {
+                logging::line(&format!("dsh-desktop: could not build the menu: {e}"));
+            }
 
             let roots = backend::search_roots(app);
             let splash = create_splash_window(app)?;
