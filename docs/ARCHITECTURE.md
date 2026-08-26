@@ -194,10 +194,16 @@ dependency graph.
 
 ### `scripts/make-icon.mjs`
 
-Generates `app-icon.png` (1024×1024) with a hand-rolled PNG encoder — CRC32
-table, IHDR/IDAT/IEND chunks, `zlib.deflateSync` — so icon regeneration needs
-no image dependency at all. `npx tauri icon app-icon.png` then fans it out to
-every platform size.
+Generates `app-icon.png` (1024×1024) with no dependencies at all: a hand-rolled
+PNG encoder (CRC32 table, IHDR/IDAT/IEND chunks, `zlib.deflateSync`) plus a
+small SVG-path rasteriser that flattens cubic béziers into polygons and fills
+them with the nonzero winding rule at 4×4 supersampling. It draws the DeepSeek
+whale from `assets/deepseek-whale.svg` over a blue rounded-rect gradient;
+`npx tauri icon app-icon.png` then fans the result out to every platform size.
+
+Keeping the artwork as an SVG and the rendering as code means the icon is
+diffable and reproducible, and the mark stays byte-identical to the one the
+harness itself serves.
 
 ## Design decisions
 

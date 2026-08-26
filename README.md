@@ -208,9 +208,10 @@ src-tauri/                 Rust (Tauri) shell
   icons/                   generated platform icons
 backend/                   the harness runtime (installed by `npm run backend:install`)
 src/index.html             minimal fallback page; the real UI is served by dsh
+assets/deepseek-whale.svg  the DeepSeek whale mark used by the app icon
 scripts/
   install-backend.mjs      installs @deepseek-ai/dsh into backend/
-  make-icon.mjs            regenerates app-icon.png (hand-rolled PNG encoder)
+  make-icon.mjs            renders the whale mark into app-icon.png
 docs/                      architecture, development, configuration, troubleshooting
 .github/workflows/         CI (fmt, clippy, test, build) and release automation
 ```
@@ -247,3 +248,7 @@ Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING
 [MIT](LICENSE) © Alexandre Cyriaco.
 
 This project is an independent desktop wrapper. The DeepSeek Harness itself is a separate project with its own license and copyright; this repository does not vendor its source, it installs it from npm at build time.
+
+### Trademarks
+
+"DeepSeek" and the DeepSeek whale logo are trademarks of their respective owner. `assets/deepseek-whale.svg` reproduces the mark exactly as the harness serves it at `/favicon.svg`, and it is used here to identify the application this shell hosts. **This is an unofficial project and is not affiliated with, endorsed by, or sponsored by DeepSeek.** The MIT licence above covers this project's own code, not the trademark. If you fork this for something that is not a DeepSeek Harness front end, replace the mark and the product name.

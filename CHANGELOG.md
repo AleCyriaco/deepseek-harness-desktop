@@ -49,8 +49,9 @@ Initial release: a native Tauri v2 shell around the DeepSeek Harness web GUI.
 - **Tooling**
   - `scripts/install-backend.mjs` — installs the harness runtime, preferring
     pnpm, then bun, then npm with `--legacy-peer-deps`.
-  - `scripts/make-icon.mjs` — dependency-free 1024×1024 icon generator with a
-    hand-rolled PNG encoder.
+  - `scripts/make-icon.mjs` — dependency-free 1024×1024 icon generator: a
+    hand-rolled PNG encoder plus a scanline SVG-path rasteriser that draws the
+    DeepSeek whale mark (`assets/deepseek-whale.svg`) over a blue gradient.
 - **Tests** — unit coverage for the loopback URL parser (including the
   LAN-suffix and no-match cases), Node version-directory parsing, numeric
   version ordering, and JavaScript entry-point detection.

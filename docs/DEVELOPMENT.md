@@ -145,13 +145,24 @@ DSH_DESKTOP_PORT=5173 DSH_DESKTOP_BACKEND=/path/to/lib/bin.js npm run dev
 
 ## Regenerating the app icon
 
-`app-icon.png` is generated, not committed — `scripts/make-icon.mjs` draws it
-with a hand-rolled PNG encoder so no image library is needed:
+`app-icon.png` is generated, not committed. `scripts/make-icon.mjs` rasterises
+the DeepSeek whale mark from `assets/deepseek-whale.svg` over the app's blue
+rounded-rect background — with a hand-rolled PNG encoder and a small
+scanline rasteriser, so no image library is needed:
 
 ```sh
 node scripts/make-icon.mjs        # writes app-icon.png (1024×1024)
 npx tauri icon app-icon.png       # fans it out into src-tauri/icons/
 ```
+
+`assets/deepseek-whale.svg` is the source of truth: it holds the mark exactly
+as the harness itself serves it at `/favicon.svg`. To restyle the icon, edit
+the background constants (`top`, `bottom`, `MARK_SCALE`) at the bottom of
+`make-icon.mjs` rather than touching the artwork.
+
+The rasteriser supports the `M`/`L`/`C`/`Z` subset the mark uses, absolute and
+relative, filling with the nonzero winding rule and 4×4 supersampling. It
+throws on any other command rather than silently drawing the wrong shape.
 
 The generated per-platform icons under `src-tauri/icons/` **are** committed, so
 that a fresh clone builds without running this step.
