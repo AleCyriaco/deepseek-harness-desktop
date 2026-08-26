@@ -438,8 +438,8 @@ fn build_command(
 /// The diagnostic shown when Node cannot be located anywhere.
 fn missing_node_message(needed_by: &str) -> String {
     format!(
-        "Node.js not found, which {needed_by} requires. Install Node.js 20 or newer, \
-         or set DSH_DESKTOP_NODE to the full path of the `node` binary."
+        "Node.js not found, which {needed_by} requires. Install Node.js 22.15 or \
+         newer, or set DSH_DESKTOP_NODE to the full path of the `node` binary."
     )
 }
 

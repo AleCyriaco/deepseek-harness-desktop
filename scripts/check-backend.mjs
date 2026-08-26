@@ -13,6 +13,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Run under the interpreter the portable build embeds, when it is staged.
+// Checking with whatever Node happens to be on the runner tests the wrong
+// thing: CI defaulted to Node 20, which lacks the zstd support in `node:zlib`
+// that the harness needs, so the check failed on a perfectly good tree.
+const vendored = join(root, "src-tauri/vendor", process.platform === "win32" ? "node.exe" : "node");
+const interpreter = existsSync(vendored) ? vendored : process.execPath;
 const entry = join(
   root,
   "backend/node_modules/@deepseek-ai/dsh/lib/bin.js".replace(/\//g, "/"),
@@ -25,7 +32,8 @@ if (!existsSync(entry)) {
   process.exit(1);
 }
 
-const child = spawn(process.execPath, [entry, "web", "--no-open", "--port", "0"], {
+console.log(`[check-backend] using ${interpreter}`);
+const child = spawn(interpreter, [entry, "web", "--no-open", "--port", "0"], {
   stdio: ["ignore", "pipe", "pipe"],
 });
 

@@ -41,7 +41,7 @@ invisible to the app. Bundle the backend (see the
 
 No `node` binary was found on `PATH` or in any of the
 [searched install directories](CONFIGURATION.md#how-node-is-located). Either
-install Node 20+, or point the app straight at it:
+install Node 22.15+, or point the app straight at it:
 
 ```sh
 DSH_DESKTOP_NODE=/opt/homebrew/bin/node open -a "DeepSeek Harness Desktop"
@@ -52,6 +52,21 @@ your Node lives somewhere the search does not cover — `DSH_DESKTOP_NODE` is th
 fix, and the install location is worth
 [reporting](https://github.com/AleCyriaco/deepseek-harness-desktop/issues) so it can be
 added.
+
+### `does not provide an export named 'createZstdDecompress'`
+
+The Node running the harness is too old. The harness stores sessions with Zstd,
+and `node:zlib` only gained `createZstdDecompress` in **22.15** — Node 20 is not
+enough, despite being current LTS for a long time.
+
+```sh
+node --version
+node -e "console.log(typeof require('zlib').createZstdDecompress)"
+```
+
+The second command must print `function`. If it prints `undefined`, upgrade
+Node, or point the app at a newer one with `DSH_DESKTOP_NODE`. The portable
+Windows build is unaffected — it carries its own interpreter.
 
 ### `failed to start the DeepSeek Harness backend: …`
 

@@ -17,7 +17,7 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 
 ## Download
 
-Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). The installers and the macOS build need **Node.js 20 or newer** on the machine; the portable Windows build needs nothing at all.
+Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). The installers and the macOS build need **Node.js 22.15 or newer** on the machine; the portable Windows build needs nothing at all, because it carries its own interpreter.
 
 | Build | What you get |
 |---|---|
@@ -99,7 +99,7 @@ A step-by-step walkthrough of the startup and shutdown sequences lives in [docs/
 
 ## Prerequisites
 
-- **Node.js ≥ 20** — the harness is a Node program; the shell shells out to it.
+- **Node.js ≥ 22.15** — the harness is a Node program; the shell shells out to it. Node 20 is *not* enough: the harness stores sessions with Zstd, and `node:zlib` only gained `createZstdDecompress` in 22.15.
 - **Rust** (stable) + Cargo — <https://rustup.rs>
 - Tauri system prerequisites — <https://tauri.app/start/prerequisites/>
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)

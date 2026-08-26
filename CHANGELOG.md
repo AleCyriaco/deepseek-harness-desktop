@@ -13,6 +13,16 @@ Nothing yet.
 
 ### Fixed
 
+- **The documented Node requirement was wrong.** Every document said Node 20
+  was enough. It is not: the harness stores sessions with Zstd, and
+  `node:zlib` only gained `createZstdDecompress` in 22.15, so Node 20 fails
+  with a module-export error that says nothing about versions. The floor is now
+  documented as 22.15 throughout. The portable build is unaffected — it carries
+  its own interpreter.
+- CI ran its checks under Node 20, so `backend:check` failed against a
+  perfectly good tree. It now runs under the interpreter the portable build
+  embeds, and the runners use Node 22.
+
 - **The portable build shipped an incomplete harness.** `npm` was invoked with
   `--legacy-peer-deps`, which skips peer dependencies — and the harness has
   real ones, so `@deepseek-ai/dsh-app-boot` was packed without

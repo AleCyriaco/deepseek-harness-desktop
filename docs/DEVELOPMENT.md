@@ -20,7 +20,7 @@ Everything you need to build, run, test and release DeepSeek Harness Desktop.
 
 | Tool | Version | Why |
 |---|---|---|
-| Node.js | ≥ 20 | Runs the Tauri CLI and the harness backend. |
+| Node.js | ≥ 22.15 | Runs the Tauri CLI and the harness backend. Node 20 cannot run the harness: it lacks Zstd in `node:zlib`. |
 | Rust | stable (via [rustup](https://rustup.rs)) | Builds the shell. |
 | Cargo components | `rustfmt`, `clippy` | CI enforces both. |
 | pnpm *(optional)* | any recent | Much faster backend install than npm. |
