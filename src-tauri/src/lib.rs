@@ -5,10 +5,10 @@
 //! hosts it in a platform webview. No harness logic is reimplemented here.
 
 mod backend;
-mod usage;
 mod logging;
 #[cfg(feature = "portable")]
 mod portable;
+mod usage;
 
 use std::{sync::Mutex, thread};
 
@@ -55,7 +55,9 @@ struct PanelState(Mutex<PanelMode>);
 /// Called on every resize as well as on every mode change: the webviews are
 /// native views positioned by hand, so nothing repositions them for us.
 fn layout(window: &Window, mode: PanelMode) {
-    let Ok(size) = window.inner_size() else { return };
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
     let scale = window.scale_factor().unwrap_or(1.0);
     let width = size.width as f64 / scale;
     let height = size.height as f64 / scale;
@@ -150,7 +152,13 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     )?;
     let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
 
-    let pin = MenuItem::with_id(app, "panel-pin", "Pin Status Panel", true, Some("CmdOrCtrl+1"))?;
+    let pin = MenuItem::with_id(
+        app,
+        "panel-pin",
+        "Pin Status Panel",
+        true,
+        Some("CmdOrCtrl+1"),
+    )?;
     let float = MenuItem::with_id(
         app,
         "panel-float",

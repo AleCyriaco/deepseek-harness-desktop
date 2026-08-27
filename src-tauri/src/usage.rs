@@ -14,8 +14,7 @@
 //! panel never waits on the network.
 
 use std::{
-    env,
-    fs,
+    env, fs,
     path::PathBuf,
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
@@ -118,10 +117,10 @@ pub fn sessions() -> Result<(Vec<Session>, PathBuf), String> {
         .join("storages")
         .join("session_projcache.json");
 
-    let text = fs::read_to_string(&path)
-        .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let parsed: Value =
-        serde_json::from_str(&text).map_err(|e| format!("{} is not valid JSON: {e}", path.display()))?;
+    let text =
+        fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let parsed: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("{} is not valid JSON: {e}", path.display()))?;
 
     let table = parsed
         .get("tables")
@@ -363,7 +362,9 @@ mod tests {
                 let stats = row(rows, "sessionStats");
                 Session {
                     id: id.trim_start_matches("session-").to_string(),
-                    title: row(rows, "title").and_then(Value::as_str).map(str::to_string),
+                    title: row(rows, "title")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
                     last_prompt_at: row(rows, "sessionListMetadata")
                         .and_then(|m| m.get("lastPromptAt"))
                         .and_then(Value::as_f64),
