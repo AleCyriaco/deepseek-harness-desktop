@@ -234,6 +234,15 @@ repository.
 
 ## Releasing
 
+Releases are cut from **`stable`**, never from `main`. `main` carries work that
+has not been released, so publishing from it would ship whatever happened to be
+in flight.
+
+- **A new feature release** — merge `main` into `stable`, then release from
+  there and start the next version on `main`.
+- **A critical fix to what people are running** — commit it on `stable`,
+  release a patch version, then bring the same commit to `main`.
+
 1. Update the version in **three** places, keeping them identical:
    - `package.json` → `version`
    - `src-tauri/Cargo.toml` → `[package] version`

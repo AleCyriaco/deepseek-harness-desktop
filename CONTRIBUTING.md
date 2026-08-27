@@ -7,6 +7,7 @@ project, so the most valuable thing you can read before writing code is the
 ## Contents
 
 - [Scope: what belongs here](#scope-what-belongs-here)
+- [Branches](#branches)
 - [Getting set up](#getting-set-up)
 - [Before you open a pull request](#before-you-open-a-pull-request)
 - [Coding conventions](#coding-conventions)
@@ -36,6 +37,19 @@ afterwards. That is the whole job.
 Those live in the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 and should be proposed there. If a change here would require adding a Tauri IPC
 command that the harness UI has to call, it is almost certainly out of scope.
+
+## Branches
+
+| Branch | What it is |
+|---|---|
+| `main` | The development line. New features land here, and its version is the one being worked towards — currently 0.2.0. |
+| `stable` | The released line, pinned to the most recent stable tag. It takes **critical fixes only**, never features. |
+
+The split exists so a serious bug in what people are running can be fixed and
+released without dragging half-finished work along with it. Fix it on `stable`,
+release a patch version from there, then bring the same commit to `main`.
+
+For anything that is not a critical fix in a released build, work from `main`.
 
 ## Getting set up
 
