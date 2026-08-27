@@ -247,33 +247,40 @@ repository.
    git push origin main --tags
    ```
 
-4. The [release workflow](../.github/workflows/release.yml) builds macOS,
-   Windows and Linux from a matrix and attaches the bundles to a **draft**
-   GitHub Release. Review the draft, then publish it.
+4. Build the bundles:
 
-### Building one platform without touching a release
+   ```sh
+   gh workflow run build.yml --ref main
+   gh run watch <run-id>
+   gh run download <run-id> --name bundles-windows-x86_64
+   gh run download <run-id> --name bundles-macos-universal
+   ```
 
-Run the same workflow manually and it builds only — no release is created or
-modified, and the bundles come back as workflow artifacts. This is how you get
-a Windows installer or a Linux package for an already-published tag without
-risking the release that is already live:
+5. **Verify before publishing.** The CI smoke test proves the harness starts,
+   but not that the packaged app does. At minimum, check the binary is what you
+   think it is, and run it.
 
-```sh
-gh workflow run release.yml --ref main
-gh run watch <run-id>
-gh run download <run-id> --name bundles-windows-x86_64
-```
+6. Publish, attaching the assets you just verified:
 
-Artifact names are `bundles-macos-universal`, `bundles-windows-x86_64` and
-`bundles-linux-x86_64`; they are kept for 14 days. Attach one to a release
-with:
+   ```sh
+   gh release create v0.2.0 --title "…" --notes-file notes.md --latest \
+     dsh-desktop-0.2.0-portable-x64.exe \
+     DeepSeek-Harness-Desktop_0.2.0_universal.dmg \
+     SHA256SUMS.txt
+   ```
 
-```sh
-gh release upload v0.1.0 <file>
-```
+### Why publishing is not automated
 
-The guard is `tagName`: it is set only when the run came from a `v*` tag push,
-and an empty `tagName` tells `tauri-action` to build without publishing.
+It used to be: the workflow triggered on `v*` tags and created a draft release.
+That fought itself. Creating a release **creates the tag**, so every publish
+triggered a build which then tried to attach its own bundles to the release
+that had just been published — and the run had to be cancelled by hand every
+time.
+
+Building and publishing are now separate. The workflow only ever produces
+artifacts; a human decides what ships. Given that every release in this
+project's history needed a human to check the binary on a real machine first,
+that matches how the work actually goes.
 
 ## Repository hygiene
 

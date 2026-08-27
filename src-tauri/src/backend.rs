@@ -109,6 +109,10 @@ pub struct Backend {
 impl Backend {
     /// Gracefully stop the server (SIGTERM to the group), then force-kill.
     pub fn shutdown(&mut self) {
+        // Clear it first: once the group is gone the id could be reused, and a
+        // late signal must not take an unrelated process with it.
+        #[cfg(unix)]
+        BACKEND_PGID.store(0, std::sync::atomic::Ordering::SeqCst);
         terminate_group(self.pid);
         // Give the Cordis host a beat to flush, then hard-kill what remains.
         thread::sleep(Duration::from_millis(600));
@@ -459,6 +463,59 @@ fn missing_node_message(needed_by: &str) -> String {
     )
 }
 
+/// The backend's process-group id, readable from a signal handler.
+///
+/// A signal handler may only call async-signal-safe functions, which rules out
+/// locking the managed state the rest of the shutdown path uses. An atomic
+/// holds the one number the handler needs.
+#[cfg(unix)]
+static BACKEND_PGID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Kill the backend from a signal handler, then leave immediately.
+///
+/// Only `kill` and `_exit` are called, both async-signal-safe. `_exit` skips
+/// destructors deliberately: the group is already gone, and running arbitrary
+/// cleanup from a handler is how a tidy shutdown becomes a deadlock.
+#[cfg(unix)]
+extern "C" fn handle_termination(signal: i32) {
+    let pgid = BACKEND_PGID.load(std::sync::atomic::Ordering::SeqCst);
+    if pgid > 0 {
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    unsafe {
+        libc::_exit(128 + signal);
+    }
+}
+
+/// Take the backend down when the app is signalled rather than closed.
+///
+/// Closing the window runs `RunEvent::Exit` and everything is torn down
+/// properly. A signal runs neither that nor `Drop`, so `kill`, a logout, or a
+/// crashing session manager used to leave the harness — and every tool
+/// subprocess it had spawned — running with no window to stop them.
+///
+/// `SIGKILL` still cannot be caught; nothing can be done about that one.
+#[cfg(unix)]
+pub fn install_signal_handlers() {
+    unsafe {
+        for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+            libc::signal(
+                signal,
+                handle_termination as *const () as libc::sighandler_t,
+            );
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn install_signal_handlers() {
+    // Windows has no equivalent path: the app is a GUI process with no
+    // console, so it is closed through its window, which runs the normal
+    // shutdown. `taskkill /T` takes the tree down by itself.
+}
+
 /// Kill a process group (unix) or a process tree (Windows).
 #[cfg(unix)]
 fn terminate_group(pid: u32) {
@@ -645,7 +702,11 @@ pub fn spawn_backend(
     };
 
     match outcome {
-        Ok(url) => Ok((Backend { child, pid }, url)),
+        Ok(url) => {
+            #[cfg(unix)]
+            BACKEND_PGID.store(pid as i32, std::sync::atomic::Ordering::SeqCst);
+            Ok((Backend { child, pid }, url))
+        }
         Err(reason) => {
             terminate_group(pid);
             let _ = child.kill();

@@ -136,7 +136,7 @@ npm run build
 
 `tauri build` produces the platform package for the OS you are building on. **Multi-platform means building once per OS** — Tauri and Rust do not cross-compile the GUI bundles, so a Windows installer cannot be produced from a Mac.
 
-The GitHub Actions [release workflow](.github/workflows/release.yml) covers that: it builds macOS, Windows and Linux from a matrix. A `v*` tag push attaches the bundles to a draft GitHub Release; a manual run builds only and returns them as workflow artifacts, leaving any published release untouched. See [Building one platform without touching a release](docs/DEVELOPMENT.md#building-one-platform-without-touching-a-release).
+The GitHub Actions [build workflow](.github/workflows/build.yml) covers that: run it by hand and it builds macOS, Windows and Linux from a matrix, returning the bundles as workflow artifacts. It never touches a release — publishing is a separate, deliberate step, described in [Releasing](docs/DEVELOPMENT.md#releasing).
 
 ## Shipping a self-contained app
 
@@ -275,8 +275,8 @@ Honest inventory of what does not work today.
 |---|---|
 | **No Linux packages** | `.deb` and `.rpm` build correctly, but the AppImage step fails inside `linuxdeploy` and aborts the job before the good packages are collected. Restricting `bundle.targets` on Linux would fix it. |
 | **Builds are unsigned** | Windows SmartScreen and macOS Gatekeeper both warn. There is no free code signing certificate for a project like this; see [SECURITY.md](SECURITY.md#distribution). |
-| **`SIGTERM` orphans the backend** | Closing the window tears the whole process group down correctly. Killing the app with a signal does not, because neither `SIGTERM` nor `SIGKILL` runs the shutdown handler. |
-| **Tag pushes fight the release** | Publishing a release creates a tag, which triggers the release workflow, which would then attach its own bundles to the release just published. The run has to be cancelled by hand each time. |
+| **`SIGKILL` orphans the backend** | `SIGTERM`, `SIGINT` and `SIGHUP` are handled and take the backend down with the app. `SIGKILL` cannot be caught by anything, so `kill -9` still leaves the harness running. |
+
 
 ## Contributing
 

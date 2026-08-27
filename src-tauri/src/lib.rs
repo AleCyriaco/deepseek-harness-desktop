@@ -176,6 +176,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             app.manage(BackendState(Mutex::new(None)));
+            backend::install_signal_handlers();
 
             let log = app
                 .path()

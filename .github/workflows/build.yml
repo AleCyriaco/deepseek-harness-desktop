@@ -1,26 +1,22 @@
-name: Release
+name: Build
 
-# Builds the desktop bundles for macOS, Windows and Linux.
+# Builds the desktop bundles for macOS, Windows and Linux and uploads them as
+# workflow artifacts. It never creates or modifies a release.
 #
-# Two modes, decided by how the run was started:
+# That separation is deliberate. Publishing used to be wired to `v*` tag
+# pushes, but creating a release *creates the tag*, so every publish triggered
+# a build that then tried to attach its own bundles to the release that had
+# just been published. The run had to be cancelled by hand every single time.
 #
-#   Tag push (`v*`)     build and attach the bundles to a DRAFT GitHub
-#                       Release, which you then review and publish by hand.
-#   Manual dispatch     build only. The bundles are uploaded as workflow
-#                       artifacts and NO release is created or modified, so
-#                       this is safe to run against an already-published tag
-#                       when you just need one platform's installer.
-#
-# Bundles produced here are UNSIGNED unless signing secrets are configured;
-# see docs/DEVELOPMENT.md#code-signing.
+# Releasing is now an explicit, verified step — see
+# docs/DEVELOPMENT.md#releasing. Bundles produced here are UNSIGNED unless
+# signing secrets are configured; see docs/DEVELOPMENT.md#code-signing.
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   # The Node version embedded in the portable build. Pinned deliberately: it
@@ -99,31 +95,13 @@ jobs:
       - name: Check the harness runtime actually starts
         run: npm run backend:check
 
-      # On a manual run `tagName` is empty, which tells tauri-action to build
-      # without creating or touching any release — the guard that keeps a
-      # published release safe from an ad-hoc rebuild.
       - name: Build the bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('DeepSeek Harness Desktop {0}', github.ref_name) || '' }}
-          releaseBody: |
-            See [CHANGELOG.md](https://github.com/AleCyriaco/deepseek-harness-desktop/blob/main/CHANGELOG.md) for what changed.
-
-            The harness runtime is bundled inside each build, so the only
-            requirement on your machine is **Node.js 20 or newer**. The macOS
-            build is a universal binary (Apple Silicon and Intel).
-
-            These bundles are unsigned, so macOS quarantines them on first
-            launch:
-
-            ```
-            xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
-            ```
-          releaseDraft: true
-          prerelease: false
+          # No tagName: that is what tells tauri-action to build and stop,
+          # rather than reaching for a release.
           args: ${{ matrix.args }}
 
       # The portable build carries the harness runtime *and* a Node

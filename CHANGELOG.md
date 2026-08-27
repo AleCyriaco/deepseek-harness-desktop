@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.7] — 2026-08-26
+
+### Fixed
+
+- **Signalling the app no longer orphans the backend.** `SIGTERM`, `SIGINT` and
+  `SIGHUP` are now handled and take the harness — and every tool subprocess it
+  spawned — down with the app. Previously only closing the window did that, so
+  `kill`, a logout or a crashing session manager left a server running with no
+  window to stop it. The handler does nothing but `kill` the process group and
+  `_exit`, both async-signal-safe; the group id is kept in an atomic because a
+  handler cannot take the lock the normal shutdown path uses. `SIGKILL` still
+  cannot be caught by anything.
+
+### Changed
+
+- **Building and publishing are separate.** The workflow used to trigger on
+  `v*` tags and create a release — but publishing a release *creates the tag*,
+  so every publish triggered a build that then tried to attach its own bundles
+  to the release just published. It had to be cancelled by hand every time.
+  `release.yml` is now `build.yml`: manual only, artifacts only, never touches
+  a release. Publishing is an explicit step, documented in
+  [Releasing](docs/DEVELOPMENT.md#releasing).
+
 ## [0.1.6] — 2026-08-26
 
 ### Fixed
