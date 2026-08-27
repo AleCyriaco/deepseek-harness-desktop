@@ -23,8 +23,35 @@ window is allowed to load.
 | Network exposure | The shell opens no sockets. The server it starts binds `127.0.0.1` on an OS-assigned port. |
 | Window origin | Only `http://127.0.0.1:<port>` — the URL announced by the process the shell itself started. |
 | Native API exposure | None. `withGlobalTauri: false`, no IPC commands registered, capabilities limited to `core:default`. |
-| Persisted secrets | None. The shell stores nothing; credentials live in the harness. |
+| Persisted secrets | None. Credentials live in the harness, not here. |
+| What the shell writes | A log file per run, and — portable build only — the runtime it unpacks from its own binary. Both under the user's own data directories. Neither holds credentials. |
 | Privileges | Runs entirely as the invoking user; no elevation, no setuid, no helper daemon. |
+
+### What the shell writes to disk
+
+Earlier versions wrote nothing at all. Two features changed that, and both are
+worth stating plainly:
+
+- **A log file**, replaced on every run, holding everything the shell and the
+  harness printed to stdout and stderr. The harness does not print credentials,
+  but the log does record file paths and the resolved backend command. Treat it
+  as you would any diagnostic log before sharing it.
+- **The unpacked runtime**, portable build only: roughly 310 MB of harness and
+  a Node interpreter, extracted from the executable into
+  `%LOCALAPPDATA%\DeepSeek Harness Desktop\runtime-<version>\`. It is a copy
+  of the payload compiled into the binary, so it is exactly as trustworthy as
+  the executable it came from — and no more. Paths inside the payload are
+  validated before writing, so a crafted archive cannot escape the target
+  directory.
+
+### The inspector is enabled in release builds
+
+`tauri`'s `devtools` feature is on for release builds, and the window's
+Troubleshooting menu opens the webview inspector. This is a deliberate trade:
+the window hosts a web UI whose client-side failures never reach the backend,
+so without it a shipped build cannot be diagnosed at all. It grants no
+capability the page did not already have — the inspector operates on content
+the user is already running, in a window that only ever loads loopback.
 
 ### Content Security Policy
 
@@ -74,7 +101,12 @@ for how to spot and stop an orphan.
 - The `npx --yes @deepseek-ai/dsh@latest` fallback downloads and executes the
   latest published harness. Convenient, but it is a network-fetch-and-run path:
   avoid it in hardened environments by installing the backend explicitly or
-  setting `DSH_DESKTOP_BACKEND`.
+  setting `DSH_DESKTOP_BACKEND`. **The portable build never reaches it** — it
+  carries its runtime and interpreter inside the executable and touches the
+  network for nothing.
+- The portable build also embeds an official Node interpreter, pinned by
+  `EMBEDDED_NODE` in the release workflow and downloaded from `nodejs.org`
+  during the build.
 
 ## Distribution
 

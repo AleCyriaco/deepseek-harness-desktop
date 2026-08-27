@@ -98,10 +98,13 @@ points at a path that no longer exists.
 
 The backend started but never printed `http://127.0.0.1:<port>`. Common causes:
 
-- The `npx` bootstrap path is downloading the package on a slow connection —
-  run `npm run backend:install` once so resolution takes the fast local path.
-- The error message now includes the exact command that was run and the last
-  lines the backend wrote to stderr; read those first.
+- The `npx` bootstrap is downloading on a slow connection. It is allowed 150
+  seconds of complete silence and reports each package it fetches, so if the
+  splash window is still counting packages it is working — run
+  `npm run backend:install` once to take the fast local path instead.
+- The error message includes the exact command that was run and both the first
+  and last lines the backend wrote; read those first. The same text is in the
+  log file.
 - `DSH_DESKTOP_PORT` names a port already in use, so the server exits before
   announcing. Unset it and let the OS assign one.
 - The harness itself is failing at startup — reproduce it directly with the

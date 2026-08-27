@@ -17,13 +17,14 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 
 ## Download
 
-Prebuilt bundles are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases). The installers and the macOS build need **Node.js 22.15 or newer** on the machine; the portable Windows build needs nothing at all, because it carries its own interpreter.
+Two builds are attached to each [GitHub Release](https://github.com/AleCyriaco/deepseek-harness-desktop/releases):
 
-| Build | What you get |
-|---|---|
-| macOS `.dmg` | Universal binary (Apple Silicon + Intel), harness runtime bundled inside. |
-| Windows `-setup.exe` / `.msi` | Installer, harness runtime bundled inside — works offline. |
-| Windows `dsh-desktop.exe` | **Portable**: one self-contained executable, no installation, nothing else required. |
+| Build | What you get | Requires |
+|---|---|---|
+| Windows `dsh-desktop-<version>-portable-x64.exe` | **Portable**: one self-contained executable, no installation. | nothing |
+| macOS `.dmg` | Universal binary (Apple Silicon + Intel), harness runtime bundled inside. | Node.js 22.15+ |
+
+Windows `.msi` and NSIS installers still build from source (`npm run build`), but are not published: the portable executable supersedes them. Linux packages are not published either — see [Known gaps](#known-gaps).
 
 ### The portable build
 
@@ -55,6 +56,7 @@ xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
 - [Project layout](#project-layout)
 - [Documentation](#documentation)
 - [When something goes wrong](#when-something-goes-wrong)
+- [Known gaps](#known-gaps)
 - [Design notes](#design-notes)
 - [Contributing](#contributing)
 - [License](#license)
@@ -264,6 +266,17 @@ Startup failures are shown in the window itself, with the exact command that was
   way a shell would, plus the directories a GUI launcher hides — see
   [Finding Node](#finding-node).
 - **The shell is stateless.** No database, no config file, no IPC commands exposed to the webview. If a feature belongs to the agent, it belongs upstream in the harness.
+
+## Known gaps
+
+Honest inventory of what does not work today.
+
+| Gap | Detail |
+|---|---|
+| **No Linux packages** | `.deb` and `.rpm` build correctly, but the AppImage step fails inside `linuxdeploy` and aborts the job before the good packages are collected. Restricting `bundle.targets` on Linux would fix it. |
+| **Builds are unsigned** | Windows SmartScreen and macOS Gatekeeper both warn. There is no free code signing certificate for a project like this; see [SECURITY.md](SECURITY.md#distribution). |
+| **`SIGTERM` orphans the backend** | Closing the window tears the whole process group down correctly. Killing the app with a signal does not, because neither `SIGTERM` nor `SIGKILL` runs the shutdown handler. |
+| **Tag pushes fight the release** | Publishing a release creates a tag, which triggers the release workflow, which would then attach its own bundles to the release just published. The run has to be cancelled by hand each time. |
 
 ## Contributing
 

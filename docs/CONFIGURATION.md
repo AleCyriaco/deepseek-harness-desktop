@@ -114,11 +114,17 @@ backend it resolved:
 
 | Backend | Budget | Why |
 |---|---|---|
-| Explicit, bundled, or `dsh` on `PATH` | 45 s | Already installed; it only has to boot. |
-| `npx --yes @deepseek-ai/dsh@latest` | 15 min | First run downloads roughly 270 MB before the server can print anything. |
+| Explicit, bundled, or `dsh` on `PATH` | 45 s total | Already installed; it prints nothing until the URL, so silence is all there is to measure. |
+| `npx --yes @deepseek-ai/dsh@latest` | 150 s of **silence**, 45 min ceiling | It reports every package it fetches, so progress can be judged by activity rather than by a stopwatch. |
 
-Neither is configurable. The splash window is shown for the whole wait, so a
-long first run looks like progress rather than a hang.
+The bootstrap deliberately measures silence rather than elapsed time. A fixed
+deadline is wrong in both directions: too short and a slow download that is
+still progressing gets killed, too long and a genuinely wedged process hangs
+for the whole budget.
+
+Neither is configurable. The splash window is shown for the whole wait and
+streams the backend's output into it, so a long first run looks like progress
+rather than a hang.
 
 ## Where harness state lives
 

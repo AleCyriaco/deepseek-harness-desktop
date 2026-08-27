@@ -177,6 +177,27 @@ user never sees an empty frame pointed at nothing.
 | `terminate_group` | Platform-specific group/tree kill. |
 | `spawn_backend` | Spawn, drain, wait for the URL, or fail cleanly. |
 | `search_roots` | The four families of directories where a bundled backend may live. |
+| `strip_verbatim_prefix` | Removes Windows' `\\?\` prefix, which Node rejects. Unit-tested. |
+| `CREATE_NO_WINDOW` | Keeps Windows from allocating a console window for the children. |
+| `Budget` | How long a backend may take, and how long it may stay silent. |
+
+### `src-tauri/src/portable.rs`
+
+Only compiled with the `portable` cargo feature. Holds the payload that
+`build.rs` packed — the harness runtime and a Node interpreter — and unpacks it
+once into a per-user cache directory on first run.
+
+Streaming matters here: the payload contains a ~100 MB interpreter, so it is
+read and written in 64 KB chunks rather than held in memory. Paths are
+validated before writing, and the completion marker is only written at the very
+end, so an interrupted unpack is redone rather than half-used.
+
+### `src-tauri/src/logging.rs`
+
+A log file, replaced on every run, holding everything the shell and the backend
+print. A GUI app has no console; without this, diagnosing anything meant asking
+the user to relaunch from a terminal — which is both awkward and misleading,
+since it changes the conditions of the run.
 
 ### `src/index.html`
 
