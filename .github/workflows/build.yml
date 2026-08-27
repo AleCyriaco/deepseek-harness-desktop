@@ -37,6 +37,10 @@ jobs:
             slug: macos-universal
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # AppImage is deliberately not built: `linuxdeploy` fails on the
+          # 300 MB resource tree the bundle carries. `.deb` and `.rpm` build
+          # fine, and the failure used to abort the job before they were
+          # collected. See bundle.targets in tauri.conf.json.
           - os: ubuntu-latest
             label: Linux
             slug: linux-x86_64

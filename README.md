@@ -13,7 +13,7 @@ It launches the real `dsh web` server as a child process and hosts the exact sam
 |---|---|---|
 | macOS | WKWebView | `.app`, `.dmg` |
 | Windows | WebView2 (Edge) | `.msi`, `.exe` (NSIS) |
-| Linux | WebKitGTK | `.deb`, `.rpm`, AppImage |
+| Linux | WebKitGTK | `.deb`, `.rpm` |
 
 ## Download
 
@@ -23,8 +23,9 @@ Two builds are attached to each [GitHub Release](https://github.com/AleCyriaco/d
 |---|---|---|
 | Windows `dsh-desktop-<version>-portable-x64.exe` | **Portable**: one self-contained executable, no installation. | nothing |
 | macOS `.dmg` | Universal binary (Apple Silicon + Intel), harness runtime bundled inside. | Node.js 22.15+ |
+| Linux `.deb` / `.rpm` | Harness runtime bundled inside. | Node.js 22.15+ |
 
-Windows `.msi` and NSIS installers still build from source (`npm run build`), but are not published: the portable executable supersedes them. Linux packages are not published either — see [Known gaps](#known-gaps).
+Windows `.msi` and NSIS installers still build from source (`npm run build`), but are not published: the portable executable supersedes them.
 
 ### The portable build
 
@@ -273,7 +274,7 @@ Honest inventory of what does not work today.
 
 | Gap | Detail |
 |---|---|
-| **No Linux packages** | `.deb` and `.rpm` build correctly, but the AppImage step fails inside `linuxdeploy` and aborts the job before the good packages are collected. Restricting `bundle.targets` on Linux would fix it. |
+| **No Linux AppImage** | `.deb` and `.rpm` are built and published. AppImage is not: `linuxdeploy` fails on the 300 MB resource tree the bundle carries, and its failure used to abort the job before the working packages were collected. Dropped rather than fixed — the two package formats cover the same ground. |
 | **Builds are unsigned** | Windows SmartScreen and macOS Gatekeeper both warn. There is no free code signing certificate for a project like this; see [SECURITY.md](SECURITY.md#distribution). |
 | **`SIGKILL` orphans the backend** | `SIGTERM`, `SIGINT` and `SIGHUP` are handled and take the backend down with the app. `SIGKILL` cannot be caught by anything, so `kill -9` still leaves the harness running. |
 

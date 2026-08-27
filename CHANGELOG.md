@@ -24,6 +24,11 @@ Nothing yet.
 
 ### Changed
 
+- **Linux packages are built again.** AppImage is no longer a bundle target:
+  `linuxdeploy` fails on the 300 MB resource tree, and because it ran last its
+  failure aborted the job before the working `.deb` and `.rpm` were collected.
+  Dropped rather than fixed — the two package formats cover the same ground,
+  and chasing `linuxdeploy` was disproportionate to what it added.
 - **Building and publishing are separate.** The workflow used to trigger on
   `v*` tags and create a release — but publishing a release *creates the tag*,
   so every publish triggered a build that then tried to attach its own bundles

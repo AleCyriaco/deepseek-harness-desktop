@@ -193,7 +193,7 @@ Bundles land in `src-tauri/target/release/bundle/`:
 |---|---|
 | macOS | `macos/DeepSeek Harness Desktop.app`, `dmg/*.dmg` |
 | Windows | `msi/*.msi`, `nsis/*.exe` |
-| Linux | `deb/*.deb`, `rpm/*.rpm`, `appimage/*.AppImage` |
+| Linux | `deb/*.deb`, `rpm/*.rpm` |
 
 Tauri does not cross-compile GUI bundles: each platform must be built on that
 platform (or in a CI runner for it).
