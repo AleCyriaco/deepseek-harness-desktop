@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `main` is the development line. Nothing here has shipped yet; the released
 build is [0.1.7](#017--2026-08-26), pinned on the `stable` branch.
 
+### Added
+
+- **A status panel**, as a second native webview beside the harness rather than
+  markup injected into its page. It shows context usage, token totals with the
+  cache hit rate, what fills the context, session timings, and the account
+  balance. Pinned, floating or hidden from the View menu.
+- Session figures are read from `~/.dsh/storages/session_projcache.json`, which
+  the harness writes itself, so they are its own numbers rather than an
+  estimate of them.
+- The balance comes from `/user/balance`, authenticated with the key the
+  harness already stores. It is read for that one request, cached for five
+  minutes, and never copied, logged or exposed to a webview — see
+  [SECURITY.md](SECURITY.md#the-status-panel-and-your-api-key).
+- The command backing the panel refuses any caller that is not the panel
+  webview, so the harness's own page cannot read the balance through the shared
+  IPC bridge.
+
+### Notes
+
+- **There are no usage charts over time, and there will not be.** DeepSeek's
+  public API exposes only `/chat/completions` and `/user/balance`; the platform
+  dashboard's request, token and cost charts come from an internal endpoint
+  authenticated by a browser session. Reproducing them would mean impersonating
+  a login, so the panel shows what can be measured honestly instead.
+
 ## [0.1.7] — 2026-08-26
 
 ### Fixed

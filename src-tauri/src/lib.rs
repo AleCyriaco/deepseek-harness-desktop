@@ -5,6 +5,7 @@
 //! hosts it in a platform webview. No harness logic is reimplemented here.
 
 mod backend;
+mod usage;
 mod logging;
 #[cfg(feature = "portable")]
 mod portable;
@@ -13,8 +14,77 @@ use std::{sync::Mutex, thread};
 
 use tauri::{
     menu::{Menu, MenuItem, Submenu},
-    AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    webview::WebviewBuilder,
+    window::WindowBuilder,
+    AppHandle, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window, WindowEvent,
 };
+
+/// How wide the status panel is, in logical pixels.
+const PANEL_WIDTH: f64 = 320.0;
+
+/// How the status panel is displayed.
+///
+/// Three states because they answer different needs: `Pinned` gives the panel
+/// its own column and shrinks the harness to fit, `Floating` overlays it for a
+/// glance without disturbing the layout, and `Hidden` gets it out of the way.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum PanelMode {
+    #[default]
+    Pinned,
+    Floating,
+    Hidden,
+}
+
+impl PanelMode {
+    fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "panel-pin" => Some(Self::Pinned),
+            "panel-float" => Some(Self::Floating),
+            "panel-hide" => Some(Self::Hidden),
+            _ => None,
+        }
+    }
+}
+
+/// The current panel mode, so a window resize can re-apply the same layout.
+struct PanelState(Mutex<PanelMode>);
+
+/// Lay the two webviews out for the given mode.
+///
+/// Called on every resize as well as on every mode change: the webviews are
+/// native views positioned by hand, so nothing repositions them for us.
+fn layout(window: &Window, mode: PanelMode) {
+    let Ok(size) = window.inner_size() else { return };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let width = size.width as f64 / scale;
+    let height = size.height as f64 / scale;
+
+    // Never let the panel crowd out the harness on a narrow window.
+    let panel_width = PANEL_WIDTH.min(width * 0.45);
+    let harness_width = match mode {
+        PanelMode::Pinned => (width - panel_width).max(1.0),
+        _ => width,
+    };
+
+    if let Some(harness) = window.get_webview("harness") {
+        let _ = harness.set_position(LogicalPosition::new(0.0, 0.0));
+        let _ = harness.set_size(LogicalSize::new(harness_width, height));
+    }
+
+    if let Some(panel) = window.get_webview(usage::PANEL_LABEL) {
+        match mode {
+            PanelMode::Hidden => {
+                let _ = panel.hide();
+            }
+            _ => {
+                let _ = panel.set_position(LogicalPosition::new(width - panel_width, 0.0));
+                let _ = panel.set_size(LogicalSize::new(panel_width, height));
+                let _ = panel.show();
+            }
+        }
+    }
+}
 
 use backend::Backend;
 
@@ -80,6 +150,23 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     )?;
     let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
 
+    let pin = MenuItem::with_id(app, "panel-pin", "Pin Status Panel", true, Some("CmdOrCtrl+1"))?;
+    let float = MenuItem::with_id(
+        app,
+        "panel-float",
+        "Float Status Panel",
+        true,
+        Some("CmdOrCtrl+2"),
+    )?;
+    let hide = MenuItem::with_id(
+        app,
+        "panel-hide",
+        "Hide Status Panel",
+        true,
+        Some("CmdOrCtrl+0"),
+    )?;
+    let view = Submenu::with_items(app, "View", true, &[&pin, &float, &hide])?;
+
     let submenu = Submenu::with_items(
         app,
         "Troubleshooting",
@@ -88,10 +175,22 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
     )?;
 
     let menu = Menu::default(app.handle())?;
+    menu.append(&view)?;
     menu.append(&submenu)?;
     app.set_menu(menu)?;
 
     app.on_menu_event(move |app, event| match event.id().as_ref() {
+        id if PanelMode::from_id(id).is_some() => {
+            let mode = PanelMode::from_id(id).expect("checked by the guard");
+            if let Some(state) = app.try_state::<PanelState>() {
+                if let Ok(mut current) = state.0.lock() {
+                    *current = mode;
+                }
+            }
+            if let Some(window) = app.get_window("main") {
+                layout(&window, mode);
+            }
+        }
         "open-log" => {
             if let Some(path) = logging::path() {
                 open_externally(path);
@@ -103,13 +202,17 @@ fn build_menu(app: &tauri::App) -> tauri::Result<()> {
             }
         }
         "devtools" => {
-            if let Some(window) = app.get_webview_window("main") {
-                window.open_devtools();
+            if let Some(window) = app.get_window("main") {
+                if let Some(harness) = window.get_webview("harness") {
+                    harness.open_devtools();
+                }
             }
         }
         "reload" => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.eval("window.location.reload()");
+            if let Some(window) = app.get_window("main") {
+                if let Some(harness) = window.get_webview("harness") {
+                    let _ = harness.eval("window.location.reload()");
+                }
             }
         }
         _ => {}
@@ -133,18 +236,39 @@ fn create_splash_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
         .build()
 }
 
-/// Create the main window, pointed at the harness URL the server announced.
-fn create_main_window(app: &AppHandle, url: &str) -> tauri::Result<WebviewWindow> {
+/// Create the main window: the harness on the left, the status panel on the
+/// right, as two native webviews.
+///
+/// Two webviews rather than one, because the panel must not be injected into
+/// the harness's page. Injecting would mean our markup living inside a UI we
+/// do not control, breaking whenever it changes — and this shell's whole point
+/// is that it leaves the harness alone.
+fn create_main_window(app: &AppHandle, url: &str, mode: PanelMode) -> tauri::Result<Window> {
     let target = url
         .parse::<url::Url>()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
 
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::External(target))
+    let window = WindowBuilder::new(app, "main")
         .title("DeepSeek Harness Desktop")
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .center()
-        .build()
+        .build()?;
+
+    window.add_child(
+        WebviewBuilder::new("harness", WebviewUrl::External(target)),
+        LogicalPosition::new(0.0, 0.0),
+        LogicalSize::new(1280.0, 800.0),
+    )?;
+
+    window.add_child(
+        WebviewBuilder::new(usage::PANEL_LABEL, WebviewUrl::App("panel.html".into())),
+        LogicalPosition::new(960.0, 0.0),
+        LogicalSize::new(PANEL_WIDTH, 800.0),
+    )?;
+
+    layout(&window, mode);
+    Ok(window)
 }
 
 /// Stream a line of backend output into the splash window.
@@ -176,6 +300,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             app.manage(BackendState(Mutex::new(None)));
+            app.manage(PanelState(Mutex::new(PanelMode::default())));
             backend::install_signal_handlers();
 
             let log = app
@@ -205,8 +330,25 @@ pub fn run() {
                 match backend::spawn_backend(&roots, move |line| report_progress(&progress, line)) {
                     Ok((backend, url)) => {
                         handle.state::<BackendState>().set(backend);
-                        match create_main_window(&handle, &url) {
-                            Ok(_) => {
+                        let mode = handle
+                            .try_state::<PanelState>()
+                            .and_then(|s| s.0.lock().ok().map(|m| *m))
+                            .unwrap_or_default();
+                        match create_main_window(&handle, &url, mode) {
+                            Ok(window) => {
+                                // The webviews are positioned by hand, so
+                                // nothing else keeps them in step with the
+                                // window as it is resized.
+                                let resized = window.clone();
+                                window.on_window_event(move |event| {
+                                    if let WindowEvent::Resized(_) = event {
+                                        let mode = resized
+                                            .try_state::<PanelState>()
+                                            .and_then(|s| s.0.lock().ok().map(|m| *m))
+                                            .unwrap_or_default();
+                                        layout(&resized, mode);
+                                    }
+                                });
                                 let _ = splash.close();
                             }
                             Err(e) => {
@@ -223,6 +365,7 @@ pub fn run() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![usage::usage_snapshot])
         .build(tauri::generate_context!())
         .expect("error while building the DeepSeek Harness Desktop app");
 

@@ -56,6 +56,7 @@ xattr -dr com.apple.quarantine "/Applications/DeepSeek Harness Desktop.app"
 - [Configuration](#configuration)
 - [Project layout](#project-layout)
 - [Documentation](#documentation)
+- [Status panel](#status-panel)
 - [When something goes wrong](#when-something-goes-wrong)
 - [Known gaps](#known-gaps)
 - [Design notes](#design-notes)
@@ -247,6 +248,30 @@ docs/                      architecture, development, configuration, troubleshoo
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to propose changes, coding conventions, commit and PR expectations. |
 | [SECURITY.md](SECURITY.md) | Security model, the CSP decision, how to report a vulnerability. |
 | [CHANGELOG.md](CHANGELOG.md) | Release history. |
+
+## Status panel
+
+A native column on the right of the window, beside the harness rather than
+inside it, showing what the current session is actually costing:
+
+| Card | Where the numbers come from |
+|---|---|
+| **Account** | DeepSeek `/user/balance`, using the key the harness already stores |
+| **Context** | `surfaceTokens` against `contextWindow` — how full the window is |
+| **Tokens** | Cached reads, uncached input and output, with the cache hit rate |
+| **What fills it** | The split between messages, tools and system prompt |
+| **This session** | Turns, steps, decode speed, and time spent in the model against tools |
+| **Sessions** | Every session the harness has recorded, most recent first |
+
+`View → Pin Status Panel` gives it its own column, `Float Status Panel` overlays
+it for a glance, and `Hide Status Panel` puts it away (`Ctrl/Cmd 1`, `2`, `0`).
+
+Everything except the balance is read from the file the harness writes itself,
+so the figures are its own rather than an estimate. There are no charts over
+time: DeepSeek's public API has no endpoint for usage history, and the platform
+dashboard's charts come from an internal, session-authenticated one. See
+[SECURITY.md](SECURITY.md#the-status-panel-and-your-api-key) for exactly how the
+key is used.
 
 ## When something goes wrong
 

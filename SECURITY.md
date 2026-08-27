@@ -23,7 +23,8 @@ window is allowed to load.
 | Network exposure | The shell opens no sockets. The server it starts binds `127.0.0.1` on an OS-assigned port. |
 | Window origin | Only `http://127.0.0.1:<port>` — the URL announced by the process the shell itself started. |
 | Native API exposure | None. `withGlobalTauri: false`, no IPC commands registered, capabilities limited to `core:default`. |
-| Persisted secrets | None. Credentials live in the harness, not here. |
+| Persisted secrets | None. The shell stores no credential of its own. |
+| Credentials read | The status panel reads `DEEPSEEK_API_KEY` from the harness's own `~/.dsh/.credentials.yaml` to call `/user/balance`. Read-only, never copied, never logged. |
 | What the shell writes | A log file per run, and — portable build only — the runtime it unpacks from its own binary. Both under the user's own data directories. Neither holds credentials. |
 | Privileges | Runs entirely as the invoking user; no elevation, no setuid, no helper daemon. |
 
@@ -43,6 +44,45 @@ worth stating plainly:
   the executable it came from — and no more. Paths inside the payload are
   validated before writing, so a crafted archive cannot escape the target
   directory.
+
+### The status panel and your API key
+
+The panel shows the account balance, which needs authentication. The key is
+read from the file the harness already keeps it in — `~/.dsh/.credentials.yaml`
+— or from `DEEPSEEK_API_KEY` in the environment if that is set instead.
+
+What that means precisely:
+
+- It is read at the moment of the request and used for one thing: a `GET` to
+  `https://api.deepseek.com/user/balance`. It goes nowhere else.
+- It is **never** copied to another file, written to the log, included in an
+  error message, or exposed to a webview. The balance response is what reaches
+  the panel; the key stays in the Rust process.
+- The result is cached for five minutes, so the key is used at most twelve
+  times an hour.
+- If you would rather it were not read at all, the panel works without it: every
+  other number it shows is measured locally, and a missing key produces a
+  message in place of the balance rather than an error.
+
+The rest of the panel touches no credentials and no network. Session tokens,
+context usage and timings all come from
+`~/.dsh/storages/session_projcache.json`, which the harness writes itself.
+
+### Why the panel cannot show usage history
+
+DeepSeek's public API exposes `/chat/completions` and `/user/balance` — nothing
+for request, token or cost history. The charts on the platform dashboard are
+served by an internal endpoint authenticated by a browser session, and
+reproducing them would mean impersonating a login. The panel therefore shows
+what can be measured honestly rather than an approximation dressed up as the
+dashboard.
+
+### The panel cannot be read by the harness page
+
+Both webviews share the window and therefore the IPC bridge. The command
+backing the panel checks which webview called it and refuses anything that is
+not the panel, so the page served by the harness cannot read the balance
+through it.
 
 ### The inspector is enabled in release builds
 

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Status</title>
+    <style>
+      :root { color-scheme: dark; --bg:#0f1115; --card:#171a21; --line:#262b36;
+              --text:#e6e8eb; --dim:#8b93a0; --faint:#5f6875; --blue:#4d6bfe;
+              --teal:#2dd4bf; --amber:#f59e0b; --red:#ff7b72; }
+      * { box-sizing: border-box; }
+      body { margin:0; background:var(--bg); color:var(--text); font-size:12px;
+             font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+             overflow-y:auto; overflow-x:hidden; }
+      .wrap { padding:12px; display:flex; flex-direction:column; gap:10px; }
+      .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:11px 12px; }
+      .card h2 { margin:0 0 9px; font-size:10.5px; font-weight:600; letter-spacing:.07em;
+                 text-transform:uppercase; color:var(--dim); }
+      .row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:5px 0; }
+      .row .k { color:var(--dim); }
+      .row .v { font-variant-numeric:tabular-nums; }
+      .big { font-size:21px; font-weight:600; font-variant-numeric:tabular-nums; }
+      .unit { font-size:11px; color:var(--dim); font-weight:400; margin-left:3px; }
+      /* A meter, not a time series: the API exposes no history to plot. */
+      .meter { height:7px; border-radius:4px; background:#0c0e13; overflow:hidden; display:flex; margin:7px 0 4px; }
+      .meter span { height:100%; display:block; }
+      .legend { display:flex; flex-wrap:wrap; gap:4px 12px; color:var(--dim); font-size:10.5px; }
+      .legend i { display:inline-block; width:7px; height:7px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+      .pill { font-size:10px; padding:1px 7px; border-radius:99px; background:#1d2430; color:var(--dim); }
+      .pill.ok { background:rgba(45,212,191,.14); color:var(--teal); }
+      .pill.warn { background:rgba(245,158,11,.14); color:var(--amber); }
+      .pill.bad { background:rgba(255,123,114,.14); color:var(--red); }
+      .muted { color:var(--faint); font-size:10.5px; line-height:1.5; }
+      .err { color:var(--red); font-size:10.5px; line-height:1.5; }
+      .sessions { display:flex; flex-direction:column; gap:2px; }
+      .sess { display:flex; justify-content:space-between; gap:8px; padding:5px 6px; border-radius:6px; }
+      .sess:hover { background:#1b1f28; }
+      .sess.cur { background:#1b2233; }
+      .sess .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .sess .n { color:var(--faint); font-variant-numeric:tabular-nums; flex:none; }
+      footer { color:var(--faint); font-size:10px; text-align:center; padding:2px 0 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap" id="wrap">
+      <div class="card"><div class="muted">Reading usage…</div></div>
+    </div>
+    <footer id="foot"></footer>
+
+    <script>
+      const invoke = (cmd) => window.__TAURI_INTERNALS__.invoke(cmd);
+      const n = (v) => (v ?? 0).toLocaleString();
+      const compact = (v) => {
+        v = v ?? 0;
+        if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+        if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+        if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+        return String(v);
+      };
+      const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
+
+      function bar(parts) {
+        const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+        const segs = parts
+          .map((p) => `<span style="width:${(p.value / total) * 100}%;background:${p.color}"></span>`)
+          .join("");
+        const legend = parts
+          .map((p) => `<div><i style="background:${p.color}"></i>${p.label} ${compact(p.value)}</div>`)
+          .join("");
+        return `<div class="meter">${segs}</div><div class="legend">${legend}</div>`;
+      }
+
+      function balanceCard(s) {
+        if (s.balance_error) {
+          return `<div class="card"><h2>Account</h2><div class="err">${s.balance_error}</div></div>`;
+        }
+        const b = s.balance;
+        if (!b) return "";
+        const state = b.available ? '<span class="pill ok">active</span>' : '<span class="pill bad">depleted</span>';
+        return `<div class="card">
+          <h2>Account ${state}</h2>
+          <div class="big">${b.total}<span class="unit">${b.currency}</span></div>
+          <div class="row"><span class="k">Topped up</span><span class="v">${b.topped_up}</span></div>
+          <div class="row"><span class="k">Granted</span><span class="v">${b.granted}</span></div>
+        </div>`;
+      }
+
+      function contextCard(s) {
+        const c = s.context, used = pct(c.surface, c.window);
+        const cls = used > 80 ? "bad" : used > 60 ? "warn" : "ok";
+        const label = used > 80 ? "compacting soon" : used > 60 ? "filling" : "healthy";
+        return `<div class="card">
+          <h2>Context <span class="pill ${cls}">${label}</span></h2>
+          <div class="big">${used.toFixed(1)}<span class="unit">% of ${compact(c.window)}</span></div>
+          <div class="meter"><span style="width:${Math.min(used,100)}%;background:var(--blue)"></span></div>
+          <div class="row"><span class="k">In context</span><span class="v">${n(c.surface)}</span></div>
+          ${c.pressure ? `<div class="row"><span class="k">Pressure</span><span class="v">${n(c.pressure)}</span></div>` : ""}
+        </div>`;
+      }
+
+      function breakdownCard(s) {
+        const b = s.breakdown;
+        if (!(b.system + b.tools + b.messages)) return "";
+        return `<div class="card"><h2>What fills it</h2>${bar([
+          { label: "Messages", value: b.messages, color: "var(--blue)" },
+          { label: "Tools", value: b.tools, color: "var(--teal)" },
+          { label: "System", value: b.system, color: "var(--amber)" },
+        ])}</div>`;
+      }
+
+      function tokensCard(s) {
+        const t = s.tokens;
+        const input = t.uncached_input + t.cache_read;
+        const hit = pct(t.cache_read, input);
+        const cls = hit > 70 ? "ok" : hit > 30 ? "warn" : "";
+        return `<div class="card">
+          <h2>Tokens <span class="pill ${cls}">${hit.toFixed(0)}% cached</span></h2>
+          ${bar([
+            { label: "Cache read", value: t.cache_read, color: "var(--teal)" },
+            { label: "Input", value: t.uncached_input, color: "var(--blue)" },
+            { label: "Output", value: t.output, color: "var(--amber)" },
+          ])}
+          <div class="row"><span class="k">Total</span><span class="v">${n(input + t.output)}</span></div>
+        </div>`;
+      }
+
+      function performanceCard(s) {
+        const st = s.stats;
+        if (!st.turns && !st.steps) return "";
+        const speed = st.decode_ms > 0 ? (st.decode_tokens / (st.decode_ms / 1000)) : 0;
+        const busy = st.llm_ms + st.tool_ms;
+        return `<div class="card">
+          <h2>This session</h2>
+          <div class="row"><span class="k">Turns</span><span class="v">${n(st.turns)}</span></div>
+          <div class="row"><span class="k">Steps</span><span class="v">${n(st.steps)}</span></div>
+          ${speed ? `<div class="row"><span class="k">Decode</span><span class="v">${speed.toFixed(1)} tok/s</span></div>` : ""}
+          ${busy ? `<div style="margin-top:8px">${bar([
+            { label: "Model", value: st.llm_ms, color: "var(--blue)" },
+            { label: "Tools", value: st.tool_ms, color: "var(--teal)" },
+          ])}</div>` : ""}
+        </div>`;
+      }
+
+      function sessionsCard(s, all) {
+        if (all.length < 2) return "";
+        const rows = all.slice(0, 8).map((x, i) =>
+          `<div class="sess ${i === 0 ? "cur" : ""}">
+             <span class="t">${(x.title || "Untitled").replace(/[<>&]/g, "")}</span>
+             <span class="n">${compact(x.tokens.output + x.tokens.uncached_input + x.tokens.cache_read)}</span>
+           </div>`).join("");
+        return `<div class="card"><h2>Sessions</h2><div class="sessions">${rows}</div></div>`;
+      }
+
+      async function refresh() {
+        let snap;
+        try {
+          snap = await invoke("usage_snapshot");
+        } catch (e) {
+          document.getElementById("wrap").innerHTML =
+            `<div class="card"><div class="err">${String(e)}</div></div>`;
+          return;
+        }
+
+        const current = snap.sessions[0];
+        const html = current
+          ? [balanceCard(snap), contextCard(current), tokensCard(current),
+             breakdownCard(current), performanceCard(current),
+             sessionsCard(current, snap.sessions)].join("")
+          : balanceCard(snap) +
+            `<div class="card"><div class="muted">No sessions recorded yet. Start one in the harness and its numbers appear here.</div></div>`;
+
+        document.getElementById("wrap").innerHTML = html;
+        document.getElementById("foot").textContent =
+          "measured locally · no usage API exists";
+      }
+
+      refresh();
+      setInterval(refresh, 2000);
+    </script>
+  </body>
+</html>
