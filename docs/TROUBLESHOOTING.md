@@ -155,6 +155,19 @@ stays blank, the webview failed to render — on Linux this is almost always a
 missing or mismatched `webkit2gtk` version; on Windows, a missing WebView2
 runtime.
 
+## Features fail partway through a session (`Failed to fetch`)
+
+Fixed in **0.1.5**; upgrade if you are on anything older.
+
+Up to 0.1.4 the shell stopped draining the backend's output once startup
+finished. The backend then blocked permanently on its next 64 KB of output —
+mid-session, after everything had looked healthy for a while. From the UI it
+looked like a page problem: actions that had worked started failing with
+`Failed to fetch`, because the requests never got an answer.
+
+Worth knowing because the symptom points away from the cause. Nothing was wrong
+with the page or the network; a pipe was full.
+
 ## A server keeps running after closing the app
 
 Closing the window terminates the whole process group. Killing the app with a
