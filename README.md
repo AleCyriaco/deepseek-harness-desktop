@@ -285,7 +285,7 @@ Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING
 
 ## License
 
-[MIT](LICENSE) © Alexandre Cyriaco.
+[MIT](LICENSE) © Alessandro Cyriaco.
 
 This project is an independent desktop wrapper. The DeepSeek Harness itself is a separate project with its own license and copyright; this repository does not vendor its source, it installs it from npm at build time.
 

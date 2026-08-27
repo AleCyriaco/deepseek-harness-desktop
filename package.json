@@ -4,7 +4,7 @@
   "version": "0.1.7",
   "description": "Native cross-platform desktop shell (Rust + Tauri v2) for the DeepSeek Harness web GUI",
   "license": "MIT",
-  "author": "Alexandre Cyriaco",
+  "author": "Alessandro Cyriaco",
   "repository": {
     "type": "git",
     "url": "https://github.com/AleCyriaco/deepseek-harness-desktop.git"

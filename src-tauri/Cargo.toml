@@ -2,7 +2,7 @@
 name = "dsh-desktop"
 version = "0.1.7"
 description = "DeepSeek Harness desktop shell: a Tauri + Rust window around the dsh web GUI"
-authors = ["Alexandre Cyriaco"]
+authors = ["Alessandro Cyriaco"]
 edition = "2021"
 license = "MIT"
 readme = "../README.md"
